@@ -1,0 +1,37 @@
+## .NET Specific
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+## Secrets and Configs
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.secret.json
+*.pfx
+*.publishsettings
+secrets.json
+.env
+.env.*
+.env.local
+
+## Infrastructure
+.docker/
+.idea/
+.terraform/
+terraform.tfstate*
+
+## Operating System
+.DS_Store
+Thumbs.db
+
+## Node.js (Shell)
+node_modules/
+dist/
+
+## Dotnet publish output
+publish/
