@@ -20,9 +20,6 @@ using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-/* ----------------------------------------------------
- * 1. CONFIGURATION VALIDATION
- * --------------------------------------------------*/
 var jwtKey = builder.Configuration["Jwt:Key"];
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var allowedOrigins = builder.Configuration
@@ -38,9 +35,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 if (builder.Environment.IsProduction() && allowedOrigins.Length == 0)
     throw new Exception("AllowedOrigins must be configured in Production.");
 
-/* ----------------------------------------------------
- * 2. CORE SERVICES
- * --------------------------------------------------*/
+/* CORE SERVICES */
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
     {
@@ -50,9 +45,7 @@ builder.Services.AddControllers()
 
 builder.Services.AddHealthChecks();
 
-/* ----------------------------------------------------
- * 3. DATABASE
- * --------------------------------------------------*/
+/* DATABASE */
 builder.Services.AddDbContext<MooreHotelsDbContext>(options =>
 {
     options.UseNpgsql(connectionString, npgsql =>
@@ -62,9 +55,7 @@ builder.Services.AddDbContext<MooreHotelsDbContext>(options =>
     });
 });
 
-/* ----------------------------------------------------
- * 4. IDENTITY
- * --------------------------------------------------*/
+/* IDENTITY */
 builder.Services
     .AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
     {
@@ -78,32 +69,19 @@ builder.Services
     .AddEntityFrameworkStores<MooreHotelsDbContext>()
     .AddDefaultTokenProviders();
 
-/* ----------------------------------------------------
- * 5. CORS
- * --------------------------------------------------*/
+/* CORS */
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
         if (builder.Environment.IsDevelopment())
-        {
-            policy.AllowAnyOrigin()
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
-        }
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
         else
-        {
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
-        }
+            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
     });
 });
 
-/* ----------------------------------------------------
- * 6. AUTHENTICATION & AUTHORIZATION
- * --------------------------------------------------*/
+/* AUTH & JWT */
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -111,31 +89,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             ValidateIssuer = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
-
             ValidateAudience = true,
             ValidAudience = builder.Configuration["Jwt:Audience"],
-
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero,
-
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtKey!)
-            )
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!))
         };
     });
-
 builder.Services.AddAuthorization();
 
-/* ----------------------------------------------------
- * 7. SIGNALR & HTTP CONTEXT
- * --------------------------------------------------*/
+/* SIGNALR */
 builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 
-/* ----------------------------------------------------
- * 8. DEPENDENCY INJECTION
- * --------------------------------------------------*/
+/* DEPENDENCY INJECTION */
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPaymentService, MockPaymentService>();
@@ -157,20 +125,13 @@ builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IOperationService, OperationService>();
 builder.Services.AddScoped<INotificationService, MooreHotels.Application.Services.NotificationService>();
 
-/* ----------------------------------------------------
- * 9. SWAGGER (DEV ONLY)
- * --------------------------------------------------*/
+/* SWAGGER (DEV ONLY) */
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc("v1", new OpenApiInfo
-        {
-            Title = "Moore Hotels API",
-            Version = "v1"
-        });
-
+        c.SwaggerDoc("v1", new OpenApiInfo { Title = "Moore Hotels API", Version = "v1" });
         c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
         {
             In = ParameterLocation.Header,
@@ -179,7 +140,6 @@ if (builder.Environment.IsDevelopment())
             Scheme = "Bearer",
             Description = "Bearer {your JWT token}"
         });
-
         c.AddSecurityRequirement(new OpenApiSecurityRequirement
         {
             {
@@ -199,14 +159,13 @@ if (builder.Environment.IsDevelopment())
 
 var app = builder.Build();
 
-/* ----------------------------------------------------
- * 10. DATABASE MIGRATION & SEEDING (RETRY-SAFE)
- * --------------------------------------------------*/
+/* MIGRATIONS & SEEDING WITH TABLE CHECK */
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var db = services.GetRequiredService<MooreHotelsDbContext>();
     var logger = services.GetRequiredService<ILogger<Program>>();
+
     var retries = 10;
     var delay = TimeSpan.FromSeconds(5);
 
@@ -217,19 +176,31 @@ using (var scope = app.Services.CreateScope())
             logger.LogInformation("Applying database migrations...");
             await db.Database.MigrateAsync();
 
+            // Ensure AspNetRoles table exists before seeding
+            var tableExists = await db.Database.ExecuteSqlRawAsync(
+                @"SELECT 1 FROM information_schema.tables 
+                  WHERE table_name='aspnetroles';"
+            ) > 0;
+
+            if (!tableExists)
+            {
+                logger.LogWarning("AspNetRoles table not found. Retrying in {0}s...", delay.TotalSeconds);
+                await Task.Delay(delay);
+                continue;
+            }
+
             if (app.Configuration.GetValue<bool>("SeedAdmin"))
             {
                 logger.LogInformation("Seeding admin roles and user...");
-                // Only pass IServiceProvider, as your method expects
                 await DbInitializer.SeedAdminAsync(services);
             }
 
             logger.LogInformation("Database migration and seeding completed successfully.");
-            break; // success
+            break;
         }
         catch (NpgsqlException ex) when (ex.SqlState == "42P01")
         {
-            logger.LogWarning("Database tables not ready yet, retrying in {0}s...", delay.TotalSeconds);
+            logger.LogWarning("Database not ready yet, retrying in {0}s...", delay.TotalSeconds);
             await Task.Delay(delay);
         }
         catch (Exception ex)
@@ -240,9 +211,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-/* ----------------------------------------------------
- * 11. MIDDLEWARE PIPELINE
- * --------------------------------------------------*/
+/* MIDDLEWARE */
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
