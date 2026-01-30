@@ -200,18 +200,17 @@ if (builder.Environment.IsDevelopment())
 var app = builder.Build();
 
 /* ----------------------------------------------------
- * 10. DATABASE MIGRATION & SEEDING (RETRY SAFE)
+ * 10. DATABASE MIGRATION & SEEDING (RETRY-SAFE)
  * --------------------------------------------------*/
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var db = services.GetRequiredService<MooreHotelsDbContext>();
     var logger = services.GetRequiredService<ILogger<Program>>();
-
-    var maxRetries = 5;
+    var retries = 10;
     var delay = TimeSpan.FromSeconds(5);
 
-    for (int i = 0; i < maxRetries; i++)
+    for (int i = 0; i < retries; i++)
     {
         try
         {
@@ -220,16 +219,17 @@ using (var scope = app.Services.CreateScope())
 
             if (app.Configuration.GetValue<bool>("SeedAdmin"))
             {
-                logger.LogInformation("Seeding admin user and roles...");
+                logger.LogInformation("Seeding admin roles and user...");
+                // Only pass IServiceProvider, as your method expects
                 await DbInitializer.SeedAdminAsync(services);
             }
 
-            logger.LogInformation("Database ready.");
+            logger.LogInformation("Database migration and seeding completed successfully.");
             break; // success
         }
         catch (NpgsqlException ex) when (ex.SqlState == "42P01")
         {
-            logger.LogWarning("Database not ready yet, retrying in {Delay}s...", delay.TotalSeconds);
+            logger.LogWarning("Database tables not ready yet, retrying in {0}s...", delay.TotalSeconds);
             await Task.Delay(delay);
         }
         catch (Exception ex)
