@@ -14,6 +14,7 @@ using MooreHotels.Infrastructure.Persistence;
 using MooreHotels.Infrastructure.Repositories;
 using MooreHotels.Infrastructure.Seed;
 using MooreHotels.Infrastructure.Services;
+using Npgsql;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -199,7 +200,7 @@ if (builder.Environment.IsDevelopment())
 var app = builder.Build();
 
 /* ----------------------------------------------------
- * 10. DATABASE MIGRATION & SEEDING
+ * 10. DATABASE MIGRATION & SEEDING (RETRY SAFE)
  * --------------------------------------------------*/
 using (var scope = app.Services.CreateScope())
 {
@@ -207,21 +208,35 @@ using (var scope = app.Services.CreateScope())
     var db = services.GetRequiredService<MooreHotelsDbContext>();
     var logger = services.GetRequiredService<ILogger<Program>>();
 
-    try
-    {
-        logger.LogInformation("Applying database migrations...");
-        await db.Database.MigrateAsync();
+    var maxRetries = 5;
+    var delay = TimeSpan.FromSeconds(5);
 
-        if (app.Configuration.GetValue<bool>("SeedAdmin"))
-        {
-            logger.LogInformation("Running admin seeding...");
-            await DbInitializer.SeedAdminAsync(services);
-        }
-    }
-    catch (Exception ex)
+    for (int i = 0; i < maxRetries; i++)
     {
-        logger.LogCritical(ex, "Database startup failed");
-        throw;
+        try
+        {
+            logger.LogInformation("Applying database migrations...");
+            await db.Database.MigrateAsync();
+
+            if (app.Configuration.GetValue<bool>("SeedAdmin"))
+            {
+                logger.LogInformation("Seeding admin user and roles...");
+                await DbInitializer.SeedAdminAsync(services);
+            }
+
+            logger.LogInformation("Database ready.");
+            break; // success
+        }
+        catch (NpgsqlException ex) when (ex.SqlState == "42P01")
+        {
+            logger.LogWarning("Database not ready yet, retrying in {Delay}s...", delay.TotalSeconds);
+            await Task.Delay(delay);
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Database migration or seeding failed.");
+            throw;
+        }
     }
 }
 
