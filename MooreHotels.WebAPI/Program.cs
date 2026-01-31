@@ -123,7 +123,7 @@ builder.Services.AddScoped<INotificationService, MooreHotels.Infrastructure.Serv
 
 var app = builder.Build();
 
-// 3. DATABASE MIGRATIONS & SEEDING
+// 3. DATABASE MIGRATIONS & SEEDING (This is the crucial part that runs when you deploy)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -133,7 +133,7 @@ using (var scope = app.Services.CreateScope())
     {
         var db = services.GetRequiredService<MooreHotelsDbContext>();
         logger.LogInformation("Applying migrations...");
-        await db.Database.MigrateAsync(); // <-- ensures Identity tables exist
+        await db.Database.MigrateAsync(); // <-- Correctly placed to run on startup
 
         if (configuration.GetValue<bool>("SeedAdmin"))
         {
