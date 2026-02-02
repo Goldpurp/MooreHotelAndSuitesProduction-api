@@ -14,79 +14,93 @@ using MooreHotels.Infrastructure.Repositories;
 using MooreHotels.Infrastructure.Seed;
 using MooreHotels.Infrastructure.Services;
 using MooreHotels.Infrastructure.Hubs;
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// =======================
-// CONFIGURATION
-// =======================
-var configuration = builder.Configuration;
+// --- 1. CONFIGURATION & SECRET VALIDATION ---
+// In production, these are pulled from Render Environment Variables
+var jwtKey = builder.Configuration["Jwt:Key"];
+var dbConnection = builder.Configuration.GetConnectionString("DefaultConnection");
+var isProduction = builder.Environment.IsProduction();
 
-var connectionString =
-    configuration.GetConnectionString("DefaultConnection")
-    ?? throw new Exception("Database connection string not configured");
+// Critical Validation: App should not start in production if secrets are compromised/missing
+if (isProduction)
+{
+    if (string.IsNullOrEmpty(jwtKey) || jwtKey.Contains("Placeholder") || jwtKey.Length < 32)
+        throw new Exception("FATAL: JWT Key is invalid or insecure. Ensure 'Jwt__Key' environment variable is set.");
 
-var jwtKey =
-    configuration["Jwt:Key"]
-    ?? throw new Exception("JWT key not configured");
+    if (string.IsNullOrEmpty(dbConnection) || dbConnection.Contains("localhost"))
+        throw new Exception("FATAL: Production database connection string is missing or pointing to localhost.");
+}
 
-// =======================
-// SERVICES
-// =======================
-builder.Services
-    .AddControllers()
-    .AddJsonOptions(options =>
-    {
+// --- 2. CORE SERVICES ---
+builder.Services.AddControllers()
+    .AddJsonOptions(options => {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
 
 builder.Services.AddDbContext<MooreHotelsDbContext>(options =>
-    options.UseNpgsql(connectionString, npgsql =>
-    {
+    options.UseNpgsql(dbConnection, npgsql => {
         npgsql.MigrationsAssembly("MooreHotels.Infrastructure");
-        npgsql.EnableRetryOnFailure();
+        npgsql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
     }));
 
-builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
-{
-    options.Password.RequiredLength = 6;
-    options.Password.RequireDigit = false;
-    options.Password.RequireUppercase = false;
-    options.Password.RequireNonAlphanumeric = false;
+builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options => {
+    options.Password.RequiredLength = 8;
+    options.Password.RequireDigit = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireNonAlphanumeric = true;
     options.User.RequireUniqueEmail = true;
 })
 .AddEntityFrameworkStores<MooreHotelsDbContext>()
 .AddDefaultTokenProviders();
 
-// =======================
-// AUTHENTICATION (JWT)
-// =======================
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-.AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = false; // REQUIRED for Render
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
+// Prevent Identity from redirecting to /Account/Login for API consumers
+builder.Services.ConfigureApplicationCookie(options => {
+    options.Events.OnRedirectToLogin = context => {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context => {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
+});
+
+// --- 3. PRODUCTION-GRADE CORS ---
+builder.Services.AddCors(options => {
+    options.AddDefaultPolicy(policy => {
+        if (builder.Environment.IsDevelopment()) {
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        } else {
+            var origins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+            policy.WithOrigins(origins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        }
+    });
+});
+
+// --- 4. AUTHENTICATION & SECURITY ---
+builder.Services.AddAuthentication(options => {
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options => {
+    options.TokenValidationParameters = new TokenValidationParameters {
         ValidateIssuer = true,
-        ValidIssuer = configuration["Jwt:Issuer"],
-
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidateAudience = true,
-        ValidAudience = configuration["Jwt:Audience"],
-
+        ValidAudience = builder.Configuration["Jwt:Audience"],
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-
-        IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(jwtKey)
-        ),
-
-        NameClaimType = ClaimTypes.Name,
-        RoleClaimType = ClaimTypes.Role,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
         ClockSkew = TimeSpan.Zero
     };
 });
@@ -95,56 +109,15 @@ builder.Services.AddAuthorization();
 builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 
-// =======================
-// SWAGGER (ENABLED IN PROD)
-// =======================
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Moore Hotels API",
-        Version = "v1"
-    });
-
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header
-    });
-
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
-
-// =======================
-// DI
-// =======================
+// --- 5. DEPENDENCY INJECTION ---
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IPaymentService, MockPaymentService>();
-
 builder.Services.AddScoped<IRoomRepository, RoomRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IGuestRepository, GuestRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IVisitRecordRepository, VisitRecordRepository>();
-
 builder.Services.AddScoped<IRoomService, RoomService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<IGuestService, GuestService>();
@@ -154,58 +127,58 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IOperationService, OperationService>();
-builder.Services.AddScoped<INotificationService, MooreHotels.Application.Services.NotificationService>();
+builder.Services.AddScoped<INotificationService, MooreHotels.Infrastructure.Services.NotificationService>();
+
+// --- 6. SWAGGER ---
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c => {
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Moore Hotels API", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme {
+        In = ParameterLocation.Header,
+        Description = "Please enter JWT with 'Bearer ' prefix",
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement {
+        {
+            new OpenApiSecurityScheme {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 var app = builder.Build();
 
-// =======================
-// DATABASE MIGRATION
-// =======================
-using (var scope = app.Services.CreateScope())
-{
+// --- 7. DB AUTOMATION (MIGRATIONS & SEEDING) ---
+using (var scope = app.Services.CreateScope()) {
     var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<MooreHotelsDbContext>();
     var logger = services.GetRequiredService<ILogger<Program>>();
-
-    try
-    {
-        var db = services.GetRequiredService<MooreHotelsDbContext>();
-        await db.Database.MigrateAsync();
-
-        if (configuration.GetValue<bool>("SeedAdmin"))
-        {
+    
+    try {
+        await context.Database.MigrateAsync();
+        if (app.Configuration.GetValue<bool>("SeedAdmin")) {
             await DbInitializer.SeedAdminAsync(services);
         }
-    }
-    catch (Exception ex)
-    {
-        logger.LogCritical(ex, "Database migration failed");
-        throw;
+    } catch (Exception ex) {
+        logger.LogError(ex, "An error occurred during DB initialization.");
     }
 }
 
-// =======================
-// MIDDLEWARE (ORDER MATTERS)
-// =======================
-app.UseForwardedHeaders();
-
+// --- 8. MIDDLEWARE PIPELINE ---
 app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Moore Hotels API v1");
-    c.RoutePrefix = "swagger";
-});
+app.UseSwaggerUI();
 
+if (!app.Environment.IsDevelopment()) {
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
 app.UseRouting();
-
-app.UseCors(policy =>
-{
-    var origins = configuration.GetSection("AllowedOrigins").Get<string[]>();
-    if (origins != null && origins.Length > 0)
-        policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-    else
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-});
-
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 

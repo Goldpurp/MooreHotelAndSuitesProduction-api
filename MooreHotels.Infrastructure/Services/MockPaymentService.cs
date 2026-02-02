@@ -17,15 +17,15 @@ public class MockPaymentService : IPaymentService
     {
         var request = _httpContextAccessor.HttpContext?.Request;
         
-        // Base URL of the API (e.g., https://localhost:7124)
+        // Use the production API address provided: https://api.moorehotelandsuites.com
+        // If the request comes in via that host, we use it. Otherwise, we fallback to the request host.
         var apiBaseUrl = request != null 
             ? $"{request.Scheme}://{request.Host}" 
-            : "";
+            : "https://api.moorehotelandsuites.com";
 
-        // Detect the frontend origin from the Referer header
-        // If the user is on http://localhost:3000, the Referer will be that.
+        // Detect the frontend origin from the Referer header to return the user to the correct UI
         var referrer = request?.Headers["Referer"].ToString();
-        var clientOrigin = "";
+        var clientOrigin = "https://moorehotelandsuites.com"; // Default production fallback
         
         if (!string.IsNullOrEmpty(referrer) && Uri.TryCreate(referrer, UriKind.Absolute, out var referrerUri))
         {
@@ -41,7 +41,8 @@ public class MockPaymentService : IPaymentService
 
     public async Task<bool> VerifyPaystackPaymentAsync(string reference)
     {
-        await Task.Delay(500); 
+        // Mocking external verification delay
+        await Task.Delay(800); 
         return !string.IsNullOrEmpty(reference);
     }
 
