@@ -29,13 +29,28 @@ public class BookingsController : ControllerBase
         => Ok(await _bookingService.GetAllBookingsAsync());
 
     [HttpGet("{code}")]
+    [Authorize(Roles = "Admin,Manager,Staff")] // Require auth for direct code access by staff
     public async Task<IActionResult> GetBookingByCode(string code)
     {
         var dto = await _bookingService.GetBookingByCodeAsync(code);
         return dto == null ? NotFound() : Ok(dto);
     }
 
+    [HttpGet("lookup")]
+    [AllowAnonymous] // Public endpoint for Guest Users
+    public async Task<IActionResult> LookupBooking([FromQuery] string code, [FromQuery] string email)
+    {
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(email))
+            return BadRequest(new { Message = "Booking code and associated email are required for lookup." });
+
+        var dto = await _bookingService.GetBookingByCodeAndEmailAsync(code, email);
+        return dto == null 
+            ? NotFound(new { Message = "No booking found with the provided credentials. Please verify your code and email." }) 
+            : Ok(dto);
+    }
+
     [HttpPost]
+    [AllowAnonymous] // Anyone can book as a guest
     public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
     {
         try 
@@ -50,18 +65,14 @@ public class BookingsController : ControllerBase
     }
 
     [HttpPost("{code}/verify-paystack")]
-    [AllowAnonymous] // Ensure simulator can call this without JWT
+    [AllowAnonymous]
     public async Task<IActionResult> VerifyPaystack(string code)
     {
-        // 1. Verify with Mock/Test Paystack Service
-        // In simulation, we treat the booking code itself as a valid reference if it exists
         var success = await _paymentService.VerifyPaystackPaymentAsync(code);
-        
         if (success)
         {
             try
             {
-                // 2. Automate Status Confirmation and Reference Recording
                 var reference = $"PS-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
                 var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference);
                 return Ok(new { Message = "Payment verified and booking confirmed automatically.", Data = dto });
@@ -71,8 +82,7 @@ public class BookingsController : ControllerBase
                 return BadRequest(new { Message = ex.Message });
             }
         }
-        
-        return BadRequest(new { Message = "Payment verification failed. Ensure the booking code is valid." });
+        return BadRequest(new { Message = "Payment verification failed." });
     }
 
     [HttpPost("{code}/confirm-transfer")]
@@ -86,7 +96,7 @@ public class BookingsController : ControllerBase
         {
             var reference = $"TRF-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
             var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference, userId);
-            return Ok(new { Message = "Bank transfer confirmed manually. Booking is now confirmed.", Data = dto });
+            return Ok(new { Message = "Bank transfer confirmed manually.", Data = dto });
         }
         catch (Exception ex)
         {

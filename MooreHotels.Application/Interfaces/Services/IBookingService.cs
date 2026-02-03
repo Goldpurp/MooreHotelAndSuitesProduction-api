@@ -7,6 +7,7 @@ public interface IBookingService
 {
     Task<BookingDto> CreateBookingAsync(CreateBookingRequest request);
     Task<BookingDto?> GetBookingByCodeAsync(string code);
+    Task<BookingDto?> GetBookingByCodeAndEmailAsync(string code, string email); // New: Guest Lookup
     Task<IEnumerable<BookingDto>> GetAllBookingsAsync();
     Task<BookingDto> UpdateStatusAsync(Guid bookingId, BookingStatus status, Guid userId);
     Task<BookingDto> ProcessPaymentSuccessAsync(string bookingCode, string reference, Guid? actingUserId = null);

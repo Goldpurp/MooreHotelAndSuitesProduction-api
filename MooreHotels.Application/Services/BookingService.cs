@@ -22,7 +22,6 @@ public class BookingService : IBookingService
     private readonly IVisitRecordService _visitService;
     private readonly INotificationService _notificationService;
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IHttpContextAccessor _httpContextAccessor;
 
     private const int CHECK_IN_HOUR = 15; // 3:00 PM
     private const int CHECK_OUT_HOUR = 11; // 11:00 AM
@@ -36,8 +35,7 @@ public class BookingService : IBookingService
         IPaymentService paymentService,
         IVisitRecordService visitService,
         INotificationService notificationService,
-        UserManager<ApplicationUser> userManager,
-        IHttpContextAccessor httpContextAccessor)
+        UserManager<ApplicationUser> userManager)
     {
         _bookingRepo = bookingRepo;
         _roomRepo = roomRepo;
@@ -48,7 +46,6 @@ public class BookingService : IBookingService
         _visitService = visitService;
         _notificationService = notificationService;
         _userManager = userManager;
-        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<BookingDto> CreateBookingAsync(CreateBookingRequest request)
@@ -56,32 +53,22 @@ public class BookingService : IBookingService
         var room = await _roomRepo.GetByIdAsync(request.RoomId);
         if (room == null) throw new Exception("Target asset not found in registry.");
         
-        // Policy Update: 'IsOnline' is now a visibility-only flag for search.
-        // If a user has the ID and the room is Available, they can book it.
-
         var checkIn = request.CheckIn.Date.AddHours(CHECK_IN_HOUR);
         var checkOut = request.CheckOut.Date.AddHours(CHECK_OUT_HOUR);
 
         if (checkOut <= checkIn)
             throw new Exception("Policy Violation: Check-out must be at least one day after check-in.");
 
-        // Check 1: Operational Status Blocks for Same-Day Check-in
         if (checkIn.Date == DateTime.UtcNow.Date)
         {
-            if (room.Status == RoomStatus.Occupied)
-                throw new Exception("Operational Constraint: Asset is currently occupied by another guest.");
-            
-            if (room.Status == RoomStatus.Maintenance)
-                throw new Exception("Operational Constraint: Asset is currently undergoing maintenance.");
-
-            if (room.Status == RoomStatus.Cleaning)
-                throw new Exception("Operational Constraint: Asset is currently being cleaned. Please wait for staff to set status to Available.");
+            if (room.Status == RoomStatus.Occupied || room.Status == RoomStatus.Maintenance || room.Status == RoomStatus.Cleaning)
+                throw new Exception($"Operational Constraint: Asset unit {room.RoomNumber} is currently {room.Status.ToString().ToLower()}.");
         }
 
-        // Check 2: Calendar Conflicts (Independent of status)
         if (await _bookingRepo.IsRoomBookedAsync(room.Id, checkIn, checkOut))
             throw new Exception("Calendar Conflict: This unit is already secured for the selected period.");
 
+        // Guest logic: Automatically handle users without accounts
         var guest = await _guestRepo.GetByEmailAsync(request.GuestEmail);
         if (guest == null)
         {
@@ -96,8 +83,7 @@ public class BookingService : IBookingService
             await _guestRepo.AddAsync(guest);
         }
 
-        var nights = (checkOut.Date - checkIn.Date).Days;
-        if (nights <= 0) nights = 1;
+        var nights = Math.Max(1, (checkOut.Date - checkIn.Date).Days);
         var totalAmount = room.PricePerNight * nights;
 
         var booking = new Booking
@@ -113,7 +99,7 @@ public class BookingService : IBookingService
             PaymentStatus = request.PaymentMethod == PaymentMethod.DirectTransfer ? PaymentStatus.AwaitingVerification : PaymentStatus.Unpaid,
             PaymentMethod = request.PaymentMethod,
             Notes = request.Notes,
-            StatusHistoryJson = JsonSerializer.Serialize(new List<object> { new { Status = BookingStatus.Pending, Timestamp = DateTime.UtcNow, Note = "Initial booking created." } }),
+            StatusHistoryJson = JsonSerializer.Serialize(new List<object> { new { Status = BookingStatus.Pending, Timestamp = DateTime.UtcNow, Note = "Initial booking created via public portal." } }),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -133,6 +119,17 @@ public class BookingService : IBookingService
     {
         var b = await _bookingRepo.GetByCodeAsync(code);
         return b != null ? MapToDto(b) : null;
+    }
+
+    public async Task<BookingDto?> GetBookingByCodeAndEmailAsync(string code, string email)
+    {
+        var b = await _bookingRepo.GetByCodeAsync(code);
+        // Security check: Only return if the email matches the guest on the booking
+        if (b != null && b.Guest?.Email.Equals(email, StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return MapToDto(b);
+        }
+        return null;
     }
 
     public async Task<IEnumerable<BookingDto>> GetAllBookingsAsync()
@@ -160,20 +157,12 @@ public class BookingService : IBookingService
             if (booking.PaymentStatus != PaymentStatus.Paid)
                 throw new Exception("Policy Violation: Full payment required before key handover.");
 
-            if (room != null)
-            {
-                room.Status = RoomStatus.Occupied;
-                await _roomRepo.UpdateAsync(room);
-            }
+            if (room != null) { room.Status = RoomStatus.Occupied; await _roomRepo.UpdateAsync(room); }
             await _visitService.CreateRecordAsync(booking.BookingCode, "CHECK_IN", actingUser.Name);
         }
         else if (status == BookingStatus.CheckedOut)
         {
-            if (room != null)
-            {
-                room.Status = RoomStatus.Cleaning;
-                await _roomRepo.UpdateAsync(room);
-            }
+            if (room != null) { room.Status = RoomStatus.Cleaning; await _roomRepo.UpdateAsync(room); }
             await _visitService.CreateRecordAsync(booking.BookingCode, "CHECK_OUT", actingUser.Name);
         }
 

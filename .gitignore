@@ -35,3 +35,4 @@ dist/
 
 ## Dotnet publish output
 publish/
+apiGuide.md
