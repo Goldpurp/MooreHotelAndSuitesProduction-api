@@ -14,32 +14,34 @@ using MooreHotels.Infrastructure.Repositories;
 using MooreHotels.Infrastructure.Seed;
 using MooreHotels.Infrastructure.Services;
 using MooreHotels.Infrastructure.Hubs;
+using MooreHotels.WebAPI.Middleware;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 1. CONFIGURATION & SECRET VALIDATION ---
-// In production, these are pulled from Render Environment Variables
 var jwtKey = builder.Configuration["Jwt:Key"];
 var dbConnection = builder.Configuration.GetConnectionString("DefaultConnection");
 var isProduction = builder.Environment.IsProduction();
 
-// Critical Validation: App should not start in production if secrets are compromised/missing
 if (isProduction)
 {
     if (string.IsNullOrEmpty(jwtKey) || jwtKey.Contains("Placeholder") || jwtKey.Length < 32)
-        throw new Exception("FATAL: JWT Key is invalid or insecure. Ensure 'Jwt__Key' environment variable is set.");
+        throw new Exception("FATAL: JWT Key is invalid. Ensure 'Jwt__Key' environment variable is correctly set.");
 
     if (string.IsNullOrEmpty(dbConnection) || dbConnection.Contains("localhost"))
-        throw new Exception("FATAL: Production database connection string is missing or pointing to localhost.");
+        throw new Exception("FATAL: Production database connection string is missing.");
 }
 
 // --- 2. CORE SERVICES ---
 builder.Services.AddControllers()
     .AddJsonOptions(options => {
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, true));
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
 
 builder.Services.AddDbContext<MooreHotelsDbContext>(options =>
@@ -59,7 +61,6 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options => {
 .AddEntityFrameworkStores<MooreHotelsDbContext>()
 .AddDefaultTokenProviders();
 
-// Prevent Identity from redirecting to /Account/Login for API consumers
 builder.Services.ConfigureApplicationCookie(options => {
     options.Events.OnRedirectToLogin = context => {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -152,7 +153,7 @@ builder.Services.AddSwaggerGen(c => {
 
 var app = builder.Build();
 
-// --- 7. DB AUTOMATION (MIGRATIONS & SEEDING) ---
+// --- 7. DB AUTOMATION ---
 using (var scope = app.Services.CreateScope()) {
     var services = scope.ServiceProvider;
     var context = services.GetRequiredService<MooreHotelsDbContext>();
@@ -164,11 +165,13 @@ using (var scope = app.Services.CreateScope()) {
             await DbInitializer.SeedAdminAsync(services);
         }
     } catch (Exception ex) {
-        logger.LogError(ex, "An error occurred during DB initialization.");
+        logger.LogError(ex, "DB initialization failure.");
     }
 }
 
 // --- 8. MIDDLEWARE PIPELINE ---
+app.UseMiddleware<ExceptionHandlingMiddleware>(); // GLOBAL ERROR HANDLER
+
 app.UseSwagger();
 app.UseSwaggerUI();
 

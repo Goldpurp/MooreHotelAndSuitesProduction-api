@@ -1,4 +1,3 @@
-
 using MooreHotels.Domain.Enums;
 
 namespace MooreHotels.Application.DTOs;
@@ -10,7 +9,7 @@ public record RoomDto(
     RoomCategory Category,
     PropertyFloor Floor, 
     RoomStatus Status, 
-    long PricePerNight,
+    decimal PricePerNight,
     int Capacity, 
     string Size, 
     bool IsOnline, 

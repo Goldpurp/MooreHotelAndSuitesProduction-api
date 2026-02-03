@@ -36,3 +36,4 @@ dist/
 ## Dotnet publish output
 publish/
 apiGuide.md
+IntegrationGuide.md

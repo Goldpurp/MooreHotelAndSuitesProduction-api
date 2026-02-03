@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using MooreHotels.Application.DTOs;
+using MooreHotels.Application.Exceptions;
 using MooreHotels.Application.Interfaces;
 using MooreHotels.Application.Interfaces.Repositories;
 using MooreHotels.Application.Interfaces.Services;
@@ -50,35 +51,51 @@ public class BookingService : IBookingService
 
     public async Task<BookingDto> CreateBookingAsync(CreateBookingRequest request)
     {
-        var room = await _roomRepo.GetByIdAsync(request.RoomId);
-        if (room == null) throw new Exception("Target asset not found in registry.");
+        if (request.RoomId == Guid.Empty)
+            throw new BadRequestException("Identity Protocol Violation: A valid Room ID is required.");
+
+        if (string.IsNullOrWhiteSpace(request.GuestEmail)) 
+            throw new BadRequestException("The Guest Email field is required.");
         
-        var checkIn = request.CheckIn.Date.AddHours(CHECK_IN_HOUR);
-        var checkOut = request.CheckOut.Date.AddHours(CHECK_OUT_HOUR);
+        if (string.IsNullOrWhiteSpace(request.GuestFirstName)) 
+            throw new BadRequestException("The Guest First Name field is required.");
+        
+        if (string.IsNullOrWhiteSpace(request.GuestLastName)) 
+            throw new BadRequestException("The Guest Last Name field is required.");
+        
+        if (string.IsNullOrWhiteSpace(request.GuestPhone)) 
+            throw new BadRequestException("The Guest Phone field is required.");
+        
+        var room = await _roomRepo.GetByIdAsync(request.RoomId);
+        if (room == null) 
+            throw new NotFoundException("Asset not found in registry.");
+        
+        // Explicitly sanitize dates as UTC
+        var checkIn = DateTime.SpecifyKind(request.CheckIn.Date.AddHours(CHECK_IN_HOUR), DateTimeKind.Utc);
+        var checkOut = DateTime.SpecifyKind(request.CheckOut.Date.AddHours(CHECK_OUT_HOUR), DateTimeKind.Utc);
 
         if (checkOut <= checkIn)
-            throw new Exception("Policy Violation: Check-out must be at least one day after check-in.");
+            throw new BadRequestException("Policy Violation: Check-out must be after check-in.");
 
         if (checkIn.Date == DateTime.UtcNow.Date)
         {
-            if (room.Status == RoomStatus.Occupied || room.Status == RoomStatus.Maintenance || room.Status == RoomStatus.Cleaning)
-                throw new Exception($"Operational Constraint: Asset unit {room.RoomNumber} is currently {room.Status.ToString().ToLower()}.");
+            if (room.Status != RoomStatus.Available && room.Status != RoomStatus.Reserved)
+                throw new BadRequestException($"Operational Block: Room {room.RoomNumber} is currently {room.Status.ToString().ToLower()} and unavailable.");
         }
 
         if (await _bookingRepo.IsRoomBookedAsync(room.Id, checkIn, checkOut))
-            throw new Exception("Calendar Conflict: This unit is already secured for the selected period.");
+            throw new BadRequestException("Conflict: This room is already reserved for the selected period.");
 
-        // Guest logic: Automatically handle users without accounts
-        var guest = await _guestRepo.GetByEmailAsync(request.GuestEmail);
+        var guest = await _guestRepo.GetByEmailAsync(request.GuestEmail.Trim().ToLower());
         if (guest == null)
         {
             guest = new Guest
             {
-                Id = $"GS-{new Random().Next(1000, 9999)}",
-                Email = request.GuestEmail,
-                FirstName = request.GuestFirstName,
-                LastName = request.GuestLastName,
-                Phone = request.GuestPhone
+                Id = $"GS-{Guid.NewGuid().ToString("N")[..6].ToUpper()}",
+                Email = request.GuestEmail.Trim().ToLower(),
+                FirstName = request.GuestFirstName.Trim(),
+                LastName = request.GuestLastName.Trim(),
+                Phone = request.GuestPhone.Trim()
             };
             await _guestRepo.AddAsync(guest);
         }
@@ -89,7 +106,7 @@ public class BookingService : IBookingService
         var booking = new Booking
         {
             Id = Guid.NewGuid(),
-            BookingCode = $"MHS-{new Random().Next(100000, 999999)}",
+            BookingCode = $"MHS-{Guid.NewGuid().ToString("N")[..8].ToUpper()}",
             RoomId = room.Id,
             GuestId = guest.Id,
             CheckIn = checkIn,
@@ -99,7 +116,7 @@ public class BookingService : IBookingService
             PaymentStatus = request.PaymentMethod == PaymentMethod.DirectTransfer ? PaymentStatus.AwaitingVerification : PaymentStatus.Unpaid,
             PaymentMethod = request.PaymentMethod,
             Notes = request.Notes,
-            StatusHistoryJson = JsonSerializer.Serialize(new List<object> { new { Status = BookingStatus.Pending, Timestamp = DateTime.UtcNow, Note = "Initial booking created via public portal." } }),
+            StatusHistoryJson = JsonSerializer.Serialize(new List<object> { new { Status = BookingStatus.Pending, Timestamp = DateTime.UtcNow, Note = "Initial reservation created." } }),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -123,9 +140,10 @@ public class BookingService : IBookingService
 
     public async Task<BookingDto?> GetBookingByCodeAndEmailAsync(string code, string email)
     {
-        var b = await _bookingRepo.GetByCodeAsync(code);
-        // Security check: Only return if the email matches the guest on the booking
-        if (b != null && b.Guest?.Email.Equals(email, StringComparison.OrdinalIgnoreCase) == true)
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(email)) return null;
+
+        var b = await _bookingRepo.GetByCodeAsync(code.Trim().ToUpper());
+        if (b != null && b.Guest?.Email.Equals(email.Trim(), StringComparison.OrdinalIgnoreCase) == true)
         {
             return MapToDto(b);
         }
@@ -141,10 +159,10 @@ public class BookingService : IBookingService
     public async Task<BookingDto> UpdateStatusAsync(Guid bookingId, BookingStatus status, Guid userId)
     {
         var booking = await _bookingRepo.GetByIdAsync(bookingId);
-        if (booking == null) throw new Exception("Folio record not found.");
+        if (booking == null) throw new NotFoundException("Booking record not found.");
 
         var actingUser = await _userManager.FindByIdAsync(userId.ToString());
-        if (actingUser == null) throw new Exception("Authorization failure: Acting user not found.");
+        if (actingUser == null) throw new UnauthorizedAccessException("Acting user authorization failed.");
 
         var room = await _roomRepo.GetByIdAsync(booking.RoomId);
         var oldStatus = booking.Status;
@@ -152,10 +170,10 @@ public class BookingService : IBookingService
         if (status == BookingStatus.CheckedIn)
         {
             if (DateTime.UtcNow.Date < booking.CheckIn.Date)
-                throw new Exception($"Policy Violation: Early check-in prohibited before {booking.CheckIn:MMM dd, yyyy}.");
+                throw new BadRequestException($"Policy Restriction: Early check-in prohibited. Reserved start: {booking.CheckIn:MMM dd, yyyy}.");
             
             if (booking.PaymentStatus != PaymentStatus.Paid)
-                throw new Exception("Policy Violation: Full payment required before key handover.");
+                throw new BadRequestException("Full payment verification required before Check-In.");
 
             if (room != null) { room.Status = RoomStatus.Occupied; await _roomRepo.UpdateAsync(room); }
             await _visitService.CreateRecordAsync(booking.BookingCode, "CHECK_IN", actingUser.Name);
@@ -189,7 +207,7 @@ public class BookingService : IBookingService
     public async Task<BookingDto> ProcessPaymentSuccessAsync(string bookingCode, string reference, Guid? actingUserId = null)
     {
         var booking = await _bookingRepo.GetByCodeAsync(bookingCode);
-        if (booking == null) throw new Exception("Booking record not found.");
+        if (booking == null) throw new NotFoundException($"Booking code '{bookingCode}' not found.");
 
         if (booking.PaymentStatus == PaymentStatus.Paid) return MapToDto(booking);
 

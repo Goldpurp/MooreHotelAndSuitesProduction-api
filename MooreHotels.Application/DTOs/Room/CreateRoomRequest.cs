@@ -1,4 +1,3 @@
-
 using MooreHotels.Domain.Enums;
 
 namespace MooreHotels.Application.DTOs;
@@ -8,8 +7,8 @@ public record CreateRoomRequest(
     string Name, 
     RoomCategory Category, 
     PropertyFloor Floor, 
-    RoomStatus Status, // Added to match UI "Current Status"
-    long PricePerNight, 
+    RoomStatus Status,
+    decimal PricePerNight, 
     int Capacity, 
     string Size, 
     string Description, 

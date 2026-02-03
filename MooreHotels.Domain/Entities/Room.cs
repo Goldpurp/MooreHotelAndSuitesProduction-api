@@ -1,4 +1,3 @@
-
 using MooreHotels.Domain.Enums;
 
 namespace MooreHotels.Domain.Entities;
@@ -11,7 +10,7 @@ public class Room
     public RoomCategory Category { get; set; }
     public PropertyFloor Floor { get; set; }
     public RoomStatus Status { get; set; }
-    public long PricePerNight { get; set; }
+    public decimal PricePerNight { get; set; }
     public int Capacity { get; set; }
     public string Size { get; set; } = string.Empty;
     public bool IsOnline { get; set; }

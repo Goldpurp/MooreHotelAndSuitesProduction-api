@@ -14,13 +14,11 @@ public class BookingsController : ControllerBase
 {
     private readonly IBookingService _bookingService;
     private readonly IPaymentService _paymentService;
-    private readonly IBookingRepository _bookingRepo;
 
-    public BookingsController(IBookingService bookingService, IPaymentService paymentService, IBookingRepository bookingRepo)
+    public BookingsController(IBookingService bookingService, IPaymentService paymentService)
     {
         _bookingService = bookingService;
         _paymentService = paymentService;
-        _bookingRepo = bookingRepo;
     }
 
     [HttpGet]
@@ -29,7 +27,7 @@ public class BookingsController : ControllerBase
         => Ok(await _bookingService.GetAllBookingsAsync());
 
     [HttpGet("{code}")]
-    [Authorize(Roles = "Admin,Manager,Staff")] // Require auth for direct code access by staff
+    [Authorize(Roles = "Admin,Manager,Staff")]
     public async Task<IActionResult> GetBookingByCode(string code)
     {
         var dto = await _bookingService.GetBookingByCodeAsync(code);
@@ -37,31 +35,21 @@ public class BookingsController : ControllerBase
     }
 
     [HttpGet("lookup")]
-    [AllowAnonymous] // Public endpoint for Guest Users
+    [AllowAnonymous]
     public async Task<IActionResult> LookupBooking([FromQuery] string code, [FromQuery] string email)
     {
-        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(email))
-            return BadRequest(new { Message = "Booking code and associated email are required for lookup." });
-
         var dto = await _bookingService.GetBookingByCodeAndEmailAsync(code, email);
         return dto == null 
-            ? NotFound(new { Message = "No booking found with the provided credentials. Please verify your code and email." }) 
+            ? NotFound(new { Message = "No booking found with the provided credentials." }) 
             : Ok(dto);
     }
 
     [HttpPost]
-    [AllowAnonymous] // Anyone can book as a guest
+    [AllowAnonymous]
     public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
     {
-        try 
-        {
-            var dto = await _bookingService.CreateBookingAsync(request);
-            return Ok(dto);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
+        var dto = await _bookingService.CreateBookingAsync(request);
+        return Ok(dto);
     }
 
     [HttpPost("{code}/verify-paystack")]
@@ -71,16 +59,9 @@ public class BookingsController : ControllerBase
         var success = await _paymentService.VerifyPaystackPaymentAsync(code);
         if (success)
         {
-            try
-            {
-                var reference = $"PS-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
-                var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference);
-                return Ok(new { Message = "Payment verified and booking confirmed automatically.", Data = dto });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Message = ex.Message });
-            }
+            var reference = $"PS-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
+            var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference);
+            return Ok(new { Message = "Payment verified successfully.", Data = dto });
         }
         return BadRequest(new { Message = "Payment verification failed." });
     }
@@ -92,16 +73,9 @@ public class BookingsController : ControllerBase
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         Guid userId = Guid.TryParse(userIdStr, out var g) ? g : Guid.Empty;
 
-        try
-        {
-            var reference = $"TRF-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
-            var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference, userId);
-            return Ok(new { Message = "Bank transfer confirmed manually.", Data = dto });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
+        var reference = $"TRF-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
+        var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference, userId);
+        return Ok(new { Message = "Bank transfer confirmed manually.", Data = dto });
     }
 
     [HttpPut("{id}/status")]
@@ -111,14 +85,7 @@ public class BookingsController : ControllerBase
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         Guid userId = Guid.TryParse(userIdStr, out var g) ? g : Guid.Empty;
         
-        try 
-        {
-            var dto = await _bookingService.UpdateStatusAsync(id, status, userId);
-            return Ok(dto);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
+        var dto = await _bookingService.UpdateStatusAsync(id, status, userId);
+        return Ok(dto);
     }
 }

@@ -51,34 +51,16 @@ public class RoomsController : ControllerBase
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> CreateRoom([FromBody] CreateRoomRequest request)
     {
-        try
-        {
-            var dto = await _roomService.CreateRoomAsync(request);
-            return CreatedAtAction(nameof(GetRoom), new { id = dto.Id }, dto);
-        }
-        catch (Exception ex) when (ex.Message.Contains("Conflict"))
-        {
-            return Conflict(new { Message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
+        var dto = await _roomService.CreateRoomAsync(request);
+        return CreatedAtAction(nameof(GetRoom), new { id = dto.Id }, dto);
     }
 
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> UpdateRoom(Guid id, [FromBody] UpdateRoomRequest request)
     {
-        try
-        {
-            await _roomService.UpdateRoomAsync(id, request);
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
+        await _roomService.UpdateRoomAsync(id, request);
+        return NoContent();
     }
 
     [HttpDelete("{id}")]
