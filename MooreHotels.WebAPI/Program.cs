@@ -73,19 +73,30 @@ builder.Services.ConfigureApplicationCookie(options => {
 });
 
 // --- 3. PRODUCTION-GRADE CORS ---
-builder.Services.AddCors(options => {
-    options.AddDefaultPolicy(policy => {
-        if (builder.Environment.IsDevelopment()) {
-            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-        } else {
-            var origins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
-            policy.WithOrigins(origins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
-        }
+// builder.Services.AddCors(options => {
+//     options.AddDefaultPolicy(policy => {
+//         if (builder.Environment.IsDevelopment()) {
+//             policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+//         } else {
+//             var origins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+//             policy.WithOrigins(origins)
+//                   .AllowAnyHeader()
+//                   .AllowAnyMethod()
+//                   .AllowCredentials();
+//         }
+//     });
+// });
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
     });
 });
+
 
 // --- 4. AUTHENTICATION & SECURITY ---
 builder.Services.AddAuthentication(options => {
