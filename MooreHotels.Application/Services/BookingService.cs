@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using MooreHotels.Application.DTOs;
-using MooreHotels.Application.Exceptions;
 using MooreHotels.Application.Interfaces;
 using MooreHotels.Application.Interfaces.Repositories;
 using MooreHotels.Application.Interfaces.Services;
@@ -51,42 +50,32 @@ public class BookingService : IBookingService
 
     public async Task<BookingDto> CreateBookingAsync(CreateBookingRequest request)
     {
-        if (request.RoomId == Guid.Empty)
-            throw new BadRequestException("Identity Protocol Violation: A valid Room ID is required.");
-
-        if (string.IsNullOrWhiteSpace(request.GuestEmail)) 
-            throw new BadRequestException("The Guest Email field is required.");
-        
-        if (string.IsNullOrWhiteSpace(request.GuestFirstName)) 
-            throw new BadRequestException("The Guest First Name field is required.");
-        
-        if (string.IsNullOrWhiteSpace(request.GuestLastName)) 
-            throw new BadRequestException("The Guest Last Name field is required.");
-        
-        if (string.IsNullOrWhiteSpace(request.GuestPhone)) 
-            throw new BadRequestException("The Guest Phone field is required.");
+        // 1. Rigorous Data Validation
+        if (string.IsNullOrWhiteSpace(request.GuestEmail)) throw new Exception("Guest email is required.");
+        if (string.IsNullOrWhiteSpace(request.GuestFirstName)) throw new Exception("Guest first name is required.");
+        if (string.IsNullOrWhiteSpace(request.GuestLastName)) throw new Exception("Guest last name is required.");
+        if (string.IsNullOrWhiteSpace(request.GuestPhone)) throw new Exception("Guest phone number is required.");
         
         var room = await _roomRepo.GetByIdAsync(request.RoomId);
-        if (room == null) 
-            throw new NotFoundException("Asset not found in registry.");
+        if (room == null) throw new Exception("Room not found in registry.");
         
-        // Explicitly sanitize dates as UTC
+        // Ensure dates are treated as UTC for PostgreSQL compatibility
         var checkIn = DateTime.SpecifyKind(request.CheckIn.Date.AddHours(CHECK_IN_HOUR), DateTimeKind.Utc);
         var checkOut = DateTime.SpecifyKind(request.CheckOut.Date.AddHours(CHECK_OUT_HOUR), DateTimeKind.Utc);
 
         if (checkOut <= checkIn)
-            throw new BadRequestException("Policy Violation: Check-out must be after check-in.");
+            throw new Exception("Check-out must be after check-in date.");
 
-        if (checkIn.Date == DateTime.UtcNow.Date)
-        {
-            if (room.Status != RoomStatus.Available && room.Status != RoomStatus.Reserved)
-                throw new BadRequestException($"Operational Block: Room {room.RoomNumber} is currently {room.Status.ToString().ToLower()} and unavailable.");
-        }
+        // New Rule: Do not block booking based on current operational status (Cleaning, etc).
+        // Only block if the asset is strictly offline/Maintenance (IsOnline = false).
+        if (!room.IsOnline)
+            throw new Exception($"Room {room.RoomNumber} is currently offline and unavailable for booking.");
 
         if (await _bookingRepo.IsRoomBookedAsync(room.Id, checkIn, checkOut))
-            throw new BadRequestException("Conflict: This room is already reserved for the selected period.");
+            throw new Exception("This room is already reserved for the selected dates.");
 
-        var guest = await _guestRepo.GetByEmailAsync(request.GuestEmail.Trim().ToLower());
+        // 2. Guest Record Resolution
+        var guest = await _guestRepo.GetByEmailAsync(request.GuestEmail.Trim());
         if (guest == null)
         {
             guest = new Guest
@@ -103,6 +92,7 @@ public class BookingService : IBookingService
         var nights = Math.Max(1, (checkOut.Date - checkIn.Date).Days);
         var totalAmount = room.PricePerNight * nights;
 
+        // 3. Booking Finalization
         var booking = new Booking
         {
             Id = Guid.NewGuid(),
@@ -116,7 +106,7 @@ public class BookingService : IBookingService
             PaymentStatus = request.PaymentMethod == PaymentMethod.DirectTransfer ? PaymentStatus.AwaitingVerification : PaymentStatus.Unpaid,
             PaymentMethod = request.PaymentMethod,
             Notes = request.Notes,
-            StatusHistoryJson = JsonSerializer.Serialize(new List<object> { new { Status = BookingStatus.Pending, Timestamp = DateTime.UtcNow, Note = "Initial reservation created." } }),
+            StatusHistoryJson = JsonSerializer.Serialize(new List<object> { new { Status = BookingStatus.Pending, Timestamp = DateTime.UtcNow, Note = "Booking initialized." } }),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -159,10 +149,10 @@ public class BookingService : IBookingService
     public async Task<BookingDto> UpdateStatusAsync(Guid bookingId, BookingStatus status, Guid userId)
     {
         var booking = await _bookingRepo.GetByIdAsync(bookingId);
-        if (booking == null) throw new NotFoundException("Booking record not found.");
+        if (booking == null) throw new Exception("Booking not found.");
 
         var actingUser = await _userManager.FindByIdAsync(userId.ToString());
-        if (actingUser == null) throw new UnauthorizedAccessException("Acting user authorization failed.");
+        if (actingUser == null) throw new Exception("User not found.");
 
         var room = await _roomRepo.GetByIdAsync(booking.RoomId);
         var oldStatus = booking.Status;
@@ -170,10 +160,10 @@ public class BookingService : IBookingService
         if (status == BookingStatus.CheckedIn)
         {
             if (DateTime.UtcNow.Date < booking.CheckIn.Date)
-                throw new BadRequestException($"Policy Restriction: Early check-in prohibited. Reserved start: {booking.CheckIn:MMM dd, yyyy}.");
+                throw new Exception($"Early check-in not allowed. Reserved start: {booking.CheckIn:MMM dd, yyyy}.");
             
             if (booking.PaymentStatus != PaymentStatus.Paid)
-                throw new BadRequestException("Full payment verification required before Check-In.");
+                throw new Exception("Full payment verification required before Check-In.");
 
             if (room != null) { room.Status = RoomStatus.Occupied; await _roomRepo.UpdateAsync(room); }
             await _visitService.CreateRecordAsync(booking.BookingCode, "CHECK_IN", actingUser.Name);
@@ -207,7 +197,7 @@ public class BookingService : IBookingService
     public async Task<BookingDto> ProcessPaymentSuccessAsync(string bookingCode, string reference, Guid? actingUserId = null)
     {
         var booking = await _bookingRepo.GetByCodeAsync(bookingCode);
-        if (booking == null) throw new NotFoundException($"Booking code '{bookingCode}' not found.");
+        if (booking == null) throw new Exception("Booking not found.");
 
         if (booking.PaymentStatus == PaymentStatus.Paid) return MapToDto(booking);
 

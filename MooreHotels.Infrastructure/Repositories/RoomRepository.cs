@@ -59,8 +59,9 @@ public class RoomRepository : IRoomRepository
         if (capacity.HasValue && capacity.Value > 0) 
             query = query.Where(r => r.Capacity >= capacity.Value);
 
-        // A room must be "Online" and not under "Maintenance" to be returned in general searches
-        query = query.Where(r => r.IsOnline && r.Status != RoomStatus.Maintenance);
+        // Inventory Control: Only return rooms that are strictly marked as 'Online'.
+        // Rooms under maintenance are forced offline via the Service logic.
+        query = query.Where(r => r.IsOnline);
 
         var rooms = await query.ToListAsync();
 

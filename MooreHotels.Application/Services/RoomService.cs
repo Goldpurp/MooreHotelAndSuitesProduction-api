@@ -55,10 +55,9 @@ public class RoomService : IRoomService
         var room = await _roomRepo.GetByIdAsync(roomId);
         if (room == null) return new RoomAvailabilityResponse(false, "Asset not found in registry.");
         
-        // Policy Update: Remove IsOnline block to allow direct availability verification for all registered rooms.
-
-        if (room.Status == RoomStatus.Maintenance) 
-            return new RoomAvailabilityResponse(false, "Asset is currently under maintenance.");
+        // Rule: Only block if the asset is offline (which includes Maintenance per the sync logic)
+        if (!room.IsOnline) 
+            return new RoomAvailabilityResponse(false, "Asset is currently offline or under maintenance.");
 
         var start = checkIn.Date.AddHours(CHECK_IN_HOUR);
         var end = checkOut.Date.AddHours(CHECK_OUT_HOUR);
@@ -79,8 +78,8 @@ public class RoomService : IRoomService
         var existingRoom = await _roomRepo.GetByRoomNumberAsync(request.RoomNumber);
         if (existingRoom != null) throw new Exception($"Conflict: Room unit '{request.RoomNumber}' is already registered.");
 
-        // New rooms default to online if they are Available
-        bool shouldBeOnline = request.Status == RoomStatus.Available || request.Status == RoomStatus.Occupied;
+        // Rule: Maintenance status forces IsOnline to false. All other statuses force IsOnline to true.
+        bool syncedOnlineStatus = request.Status != RoomStatus.Maintenance;
 
         var room = new Room
         {
@@ -96,7 +95,7 @@ public class RoomService : IRoomService
             Amenities = request.Amenities ?? new List<string>(),
             Images = request.Images ?? new List<string>(),
             Status = request.Status,
-            IsOnline = shouldBeOnline,
+            IsOnline = syncedOnlineStatus,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -117,16 +116,8 @@ public class RoomService : IRoomService
         room.Description = request.Description;
         room.Amenities = request.Amenities;
 
-        // SYNC LOGIC: If a user sets a room to 'Available' but forgot to toggle 'Online', 
-        // the system assumes they want it to be bookable.
-        if (request.Status == RoomStatus.Available && !request.IsOnline)
-        {
-            room.IsOnline = true;
-        }
-        else
-        {
-            room.IsOnline = request.IsOnline;
-        }
+        // Rule: Sync IsOnline with Maintenance status
+        room.IsOnline = request.Status != RoomStatus.Maintenance;
 
         await _roomRepo.UpdateAsync(room);
     }
