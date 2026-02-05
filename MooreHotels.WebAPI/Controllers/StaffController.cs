@@ -3,12 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using MooreHotels.Application.DTOs;
 using MooreHotels.Application.Interfaces.Services;
 using MooreHotels.Domain.Enums;
+using System.Security.Claims;
 
 namespace MooreHotels.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/admin/management")]
-[Authorize(Roles = "Admin")]
 public class StaffController : ControllerBase
 {
     private readonly IStaffService _staffService;
@@ -19,33 +19,43 @@ public class StaffController : ControllerBase
     }
 
     [HttpGet("stats")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> GetStats()
     {
         return Ok(await _staffService.GetStaffStatsAsync());
     }
 
     [HttpGet("employees")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> GetStaffList()
     {
-        // Strictly returns company staff members (Manager, Staff, Admin)
         return Ok(await _staffService.GetAllStaffAsync());
     }
 
     [HttpGet("clients")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> GetGuestUserList()
     {
-        // Returns only registered website clients/guests
         var allUsers = await _staffService.GetAllUsersAsync();
         return Ok(allUsers.Where(u => u.Role == UserRole.Client));
     }
 
     [HttpPost("onboard-staff")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Onboard([FromBody] OnboardUserRequest request)
     {
         try
         {
-            await _staffService.OnboardUserAsync(request);
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(userIdStr, out var actingUserId))
+                return Unauthorized();
+
+            await _staffService.OnboardUserAsync(request, actingUserId);
             return Ok(new { Message = "Staff member successfully provisioned in the system." });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { Message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -54,6 +64,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpPost("accounts/{id}/activate")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ActivateUser(Guid id)
     {
         try
@@ -68,6 +79,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpPost("accounts/{id}/deactivate")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> DeactivateUser(Guid id)
     {
         try
@@ -82,6 +94,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpDelete("accounts/{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(Guid id)
     {
         try

@@ -1,4 +1,3 @@
-
 using Microsoft.AspNetCore.Identity;
 using MooreHotels.Domain.Enums;
 
@@ -10,6 +9,7 @@ public class ApplicationUser : IdentityUser<Guid>
     public UserRole Role { get; set; }
     public ProfileStatus Status { get; set; } = ProfileStatus.Active;
     public string? AvatarUrl { get; set; }
-    public string? SecurityPin { get; set; } // For the "New Authorization PIN" in UI
+    public string? SecurityPin { get; set; } 
+    public string? Department { get; set; } // Categorization: Housekeeping, Reception, etc.
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

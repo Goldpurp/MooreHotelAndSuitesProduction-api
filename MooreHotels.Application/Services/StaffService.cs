@@ -9,10 +9,14 @@ namespace MooreHotels.Application.Services;
 public class StaffService : IStaffService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IAuditService _auditService;
 
-    public StaffService(UserManager<ApplicationUser> userManager)
+    private static readonly string[] AllowedDepartments = { "Housekeeping", "Reception", "FrontDesk", "Concierge" };
+
+    public StaffService(UserManager<ApplicationUser> userManager, IAuditService auditService)
     {
         _userManager = userManager;
+        _auditService = auditService;
     }
 
     public Task<StaffDashboardStatsDto> GetStaffStatsAsync()
@@ -65,12 +69,41 @@ public class StaffService : IStaffService
 
     public async Task OnboardUserAsync(OnboardUserRequest request)
     {
-        if (request.AssignedRole == UserRole.Client)
-            throw new Exception("Operational Error: Client accounts must be registered via the public portal.");
+        // This method signature expects to be called within a context where the acting user is known
+        // (Handled via the internal logic or by adding actingUserId to the interface)
+        throw new NotImplementedException("Use the overload with actingUserId.");
+    }
 
+    public async Task OnboardUserAsync(OnboardUserRequest request, Guid actingUserId)
+    {
+        // 1. Resolve Acting Admin & Enforce RBAC
+        var actingUser = await _userManager.FindByIdAsync(actingUserId.ToString());
+        if (actingUser == null) throw new UnauthorizedAccessException("Acting user not found.");
+
+        if (actingUser.Role == UserRole.Manager && request.AssignedRole != UserRole.Staff)
+        {
+            throw new UnauthorizedAccessException("Managerial constraint: Managers are only permitted to onboard 'Staff' roles.");
+        }
+
+        if (actingUser.Role != UserRole.Admin && actingUser.Role != UserRole.Manager)
+        {
+            throw new UnauthorizedAccessException("Insufficient permissions for security provisioning.");
+        }
+
+        // 2. Validate Department for Staff
+        if (request.AssignedRole == UserRole.Staff && !string.IsNullOrEmpty(request.Department))
+        {
+            if (!AllowedDepartments.Contains(request.Department))
+            {
+                throw new Exception($"Invalid department. Allowed values: {string.Join(", ", AllowedDepartments)}");
+            }
+        }
+
+        // 3. Existence Check
         var existing = await _userManager.FindByEmailAsync(request.Email);
-        if (existing != null) throw new Exception("A user with this email already exists.");
+        if (existing != null) throw new Exception("Conflict: A user with this email identity is already registered.");
 
+        // 4. Provision User
         var user = new ApplicationUser
         {
             Id = Guid.NewGuid(),
@@ -79,6 +112,7 @@ public class StaffService : IStaffService
             Name = request.FullName,
             Role = request.AssignedRole,
             Status = request.Status,
+            Department = request.AssignedRole == UserRole.Staff ? request.Department : null,
             EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -87,10 +121,24 @@ public class StaffService : IStaffService
         if (!result.Succeeded)
         {
             var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-            throw new Exception($"Provisioning failed: {errors}");
+            throw new Exception($"Provisioning protocol failed: {errors}");
         }
 
         await _userManager.AddToRoleAsync(user, request.AssignedRole.ToString());
+
+        // 5. Audit Logging
+        await _auditService.LogActionAsync(
+            actingUserId, 
+            "USER_ONBOARDED", 
+            "User", 
+            user.Id.ToString(), 
+            null, 
+            new { 
+                Email = user.Email, 
+                Role = user.Role.ToString(), 
+                Department = user.Department,
+                CreatedBy = actingUser.Name 
+            });
     }
 
     public async Task ToggleUserStatusAsync(Guid userId)
