@@ -9,4 +9,5 @@ public record UserProfileDto(
     string? AvatarUrl,
     bool EmailVerified,
     DateTime CreatedAt,
-    string? GuestId);
+    string? GuestId,
+    string? Department);

@@ -47,7 +47,8 @@ public class ProfileService : IProfileService
             user.AvatarUrl,
             user.EmailConfirmed,
             user.CreatedAt,
-            guest?.Id
+            guest?.Id,
+            user.Department
         );
     }
 
@@ -69,7 +70,7 @@ public class ProfileService : IProfileService
         {
             var existing = await _userManager.FindByEmailAsync(request.Email);
             if (existing != null && existing.Id != userId)
-                throw new Exception("Conflict: The requested email address is already associated with another account.");
+                throw new Exception("Conflict: Email address is already associated with another account.");
 
             user.Email = request.Email;
             user.UserName = request.Email;
@@ -134,7 +135,7 @@ public class ProfileService : IProfileService
     public async Task RotateCredentialsAsync(Guid userId, RotateCredentialsRequest request)
     {
         if (request.NewPassword != request.ConfirmNewPassword)
-            throw new Exception("Security Failure: The new password and confirmation password do not match.");
+            throw new Exception("Security Failure: New password and confirmation do not match.");
 
         var user = await _userManager.FindByIdAsync(userId.ToString());
         if (user == null) throw new Exception("User not found");
@@ -144,30 +145,25 @@ public class ProfileService : IProfileService
             throw new Exception($"Identity Update Failed: {string.Join(", ", result.Errors.Select(e => e.Description))}");
 
         await _auditService.LogActionAsync(userId, "ROTATE_CREDENTIALS", "User", userId.ToString(), 
-            new { Message = "Security credentials updated via rotation protocol." });
+            new { Message = "Security credentials updated." });
     }
 
     public async Task ForgotPasswordAsync(string email)
     {
         var user = await _userManager.FindByEmailAsync(email);
-        if (user == null) 
-            return; // Silent return for security to prevent email enumeration
+        if (user == null) return;
 
-        // 1. Generate a secure random temporary password
         var tempPassword = GenerateRandomPassword(10);
-        
-        // 2. Generate reset token and apply the new password
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
         var result = await _userManager.ResetPasswordAsync(user, token, tempPassword);
 
         if (!result.Succeeded)
             throw new Exception("Internal Security Protocol Error: Could not reset password.");
 
-        // 3. Dispatch communication
         await _emailService.SendTemporaryPasswordAsync(user.Email!, user.Name, tempPassword);
 
         await _auditService.LogActionAsync(user.Id, "FORGOT_PASSWORD_TRIGGERED", "User", user.Id.ToString(), 
-            new { Message = "Temporary password generated and dispatched." });
+            new { Message = "Temporary password generated." });
     }
 
     public async Task DeactivateAccountAsync(Guid userId)
@@ -176,7 +172,7 @@ public class ProfileService : IProfileService
         if (user == null) throw new Exception("User not found");
 
         if (user.Role == UserRole.Admin)
-            throw new Exception("Security Constraint: System Administrator account cannot be deactivated.");
+            throw new Exception("Security Constraint: Admin account cannot be deactivated.");
 
         user.Status = ProfileStatus.Suspended;
         await _userManager.UpdateAsync(user);

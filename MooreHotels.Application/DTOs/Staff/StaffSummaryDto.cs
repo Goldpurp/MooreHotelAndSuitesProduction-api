@@ -9,5 +9,6 @@ public record StaffSummaryDto(
     string? Phone,
     string? AvatarUrl,
     UserRole Role,
+    string? Department,
     DateTime OnboardingDate,
     ProfileStatus Status);
