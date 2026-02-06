@@ -14,11 +14,13 @@ public class BookingsController : ControllerBase
 {
     private readonly IBookingService _bookingService;
     private readonly IPaymentService _paymentService;
+    private readonly IBookingRepository _bookingRepo;
 
-    public BookingsController(IBookingService bookingService, IPaymentService paymentService)
+    public BookingsController(IBookingService bookingService, IPaymentService paymentService, IBookingRepository bookingRepo)
     {
         _bookingService = bookingService;
         _paymentService = paymentService;
+        _bookingRepo = bookingRepo;
     }
 
     [HttpGet]
@@ -38,6 +40,9 @@ public class BookingsController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> LookupBooking([FromQuery] string code, [FromQuery] string email)
     {
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(email))
+            return BadRequest(new { Message = "Booking code and associated email are required for lookup." });
+
         var dto = await _bookingService.GetBookingByCodeAndEmailAsync(code, email);
         return dto == null 
             ? NotFound(new { Message = "No booking found with the provided credentials." }) 
@@ -48,8 +53,15 @@ public class BookingsController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
     {
-        var dto = await _bookingService.CreateBookingAsync(request);
-        return Ok(dto);
+        try 
+        {
+            var dto = await _bookingService.CreateBookingAsync(request);
+            return Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = ex.Message });
+        }
     }
 
     [HttpPost("{code}/verify-paystack")]
@@ -59,23 +71,37 @@ public class BookingsController : ControllerBase
         var success = await _paymentService.VerifyPaystackPaymentAsync(code);
         if (success)
         {
-            var reference = $"PS-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
-            var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference);
-            return Ok(new { Message = "Payment verified successfully.", Data = dto });
+            try
+            {
+                var reference = $"PS-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
+                var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference);
+                return Ok(new { Message = "Payment verified automatically.", Data = dto });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
         return BadRequest(new { Message = "Payment verification failed." });
     }
 
     [HttpPost("{code}/confirm-transfer")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     public async Task<IActionResult> ConfirmTransfer(string code)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         Guid userId = Guid.TryParse(userIdStr, out var g) ? g : Guid.Empty;
 
-        var reference = $"TRF-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
-        var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference, userId);
-        return Ok(new { Message = "Bank transfer confirmed manually.", Data = dto });
+        try
+        {
+            var reference = $"TRF-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
+            var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference, userId);
+            return Ok(new { Message = "Bank transfer confirmed manually.", Data = dto });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = ex.Message });
+        }
     }
 
     [HttpPut("{id}/status")]
@@ -85,7 +111,14 @@ public class BookingsController : ControllerBase
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         Guid userId = Guid.TryParse(userIdStr, out var g) ? g : Guid.Empty;
         
-        var dto = await _bookingService.UpdateStatusAsync(id, status, userId);
-        return Ok(dto);
+        try 
+        {
+            var dto = await _bookingService.UpdateStatusAsync(id, status, userId);
+            return Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = ex.Message });
+        }
     }
 }
