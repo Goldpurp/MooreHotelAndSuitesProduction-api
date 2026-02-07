@@ -8,4 +8,5 @@ public record OnboardUserRequest(
     string TemporaryPassword,
     UserRole AssignedRole,
     ProfileStatus Status,
-    string? Department = null);
+    string? Department = null,
+    string? Phone = null);

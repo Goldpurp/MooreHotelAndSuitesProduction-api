@@ -106,11 +106,12 @@ public class StaffService : IStaffService
             UserName = request.Email,
             Email = request.Email,
             Name = request.FullName,
+            PhoneNumber = request.Phone, // Mapped optional phone field
             Role = request.AssignedRole,
             Status = request.Status,
             Department = request.AssignedRole == UserRole.Staff ? request.Department : null,
             EmailConfirmed = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow // Explicitly recording creation time
         };
 
         var result = await _userManager.CreateAsync(user, request.TemporaryPassword);
@@ -132,7 +133,9 @@ public class StaffService : IStaffService
                 Email = user.Email, 
                 Role = user.Role.ToString(), 
                 Department = user.Department,
-                CreatedBy = actingUser.Name 
+                Phone = user.PhoneNumber,
+                CreatedBy = actingUser.Name,
+                Timestamp = user.CreatedAt
             });
     }
 
