@@ -106,12 +106,12 @@ public class StaffService : IStaffService
             UserName = request.Email,
             Email = request.Email,
             Name = request.FullName,
-            PhoneNumber = request.Phone, // Mapped optional phone field
+            PhoneNumber = request.Phone, 
             Role = request.AssignedRole,
             Status = request.Status,
             Department = request.AssignedRole == UserRole.Staff ? request.Department : null,
             EmailConfirmed = true,
-            CreatedAt = DateTime.UtcNow // Explicitly recording creation time
+            CreatedAt = DateTime.UtcNow 
         };
 
         var result = await _userManager.CreateAsync(user, request.TemporaryPassword);
@@ -148,6 +148,12 @@ public class StaffService : IStaffService
             throw new Exception("Security Violation: System Administrator status is immutable.");
 
         user.Status = user.Status == ProfileStatus.Active ? ProfileStatus.Suspended : ProfileStatus.Active;
+        
+        if (user.Status == ProfileStatus.Suspended)
+        {
+            await _userManager.UpdateSecurityStampAsync(user);
+        }
+
         await _userManager.UpdateAsync(user);
     }
 
@@ -169,6 +175,9 @@ public class StaffService : IStaffService
             throw new Exception("Security Violation: Administrative accounts cannot be deactivated.");
 
         user.Status = ProfileStatus.Suspended;
+        
+        // Forced logout by invalidating security stamp
+        await _userManager.UpdateSecurityStampAsync(user);
         await _userManager.UpdateAsync(user);
     }
 
