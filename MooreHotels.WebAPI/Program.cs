@@ -97,7 +97,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-
 // --- 4. AUTHENTICATION & SECURITY ---
 builder.Services.AddAuthentication(options => {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -181,8 +180,6 @@ using (var scope = app.Services.CreateScope()) {
 }
 
 // --- 8. MIDDLEWARE PIPELINE ---
-app.UseMiddleware<ExceptionHandlingMiddleware>(); // GLOBAL ERROR HANDLER
-
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -193,7 +190,10 @@ if (!app.Environment.IsDevelopment()) {
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors();
+
 app.UseAuthentication();
+// CRITICAL: Check user status immediately after authentication to invalidate tokens of suspended users
+app.UseUserStatusInvasion(); 
 app.UseAuthorization();
 
 app.MapControllers();
