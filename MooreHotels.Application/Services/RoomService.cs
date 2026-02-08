@@ -20,28 +20,39 @@ public class RoomService : IRoomService
         _bookingRepo = bookingRepo;
     }
 
-    public async Task<IEnumerable<RoomDto>> GetAllRoomsAsync(RoomCategory? category = null)
+    public async Task<PagedResultDto<RoomDto>> GetAllRoomsAsync(RoomCategory? category = null, int? page = null, int? pageSize = null)
     {
-        var rooms = await _roomRepo.GetAllAsync(onlyOnline: false); 
-        if (category.HasValue) rooms = rooms.Where(r => r.Category == category);
+        var result = await _roomRepo.GetAllAsync(onlyOnline: false, page, pageSize); 
+        var items = result.Items;
+        if (category.HasValue) items = items.Where(r => r.Category == category);
 
-        return rooms.Select(MapToDto);
+        return new PagedResultDto<RoomDto>(
+            items.Select(MapToDto),
+            result.TotalCount,
+            page,
+            pageSize);
     }
 
-    public async Task<IEnumerable<RoomDto>> SearchRoomsAsync(RoomSearchRequest request)
+    public async Task<PagedResultDto<RoomDto>> SearchRoomsAsync(RoomSearchRequest request)
     {
         var checkIn = request.CheckIn?.Date.AddHours(CHECK_IN_HOUR);
         var checkOut = request.CheckOut?.Date.AddHours(CHECK_OUT_HOUR);
 
-        var rooms = await _roomRepo.SearchAsync(
+        var result = await _roomRepo.SearchAsync(
             checkIn, 
             checkOut, 
             request.Category, 
             request.Capacity,
             request.RoomNumber,
-            request.Amenity);
+            request.Amenity,
+            request.Page,
+            request.PageSize);
 
-        return rooms.Select(MapToDto);
+        return new PagedResultDto<RoomDto>(
+            result.Items.Select(MapToDto),
+            result.TotalCount,
+            request.Page,
+            request.PageSize);
     }
 
     public async Task<RoomDto?> GetRoomByIdAsync(Guid id)
@@ -55,7 +66,6 @@ public class RoomService : IRoomService
         var room = await _roomRepo.GetByIdAsync(roomId);
         if (room == null) return new RoomAvailabilityResponse(false, "Asset not found in registry.");
         
-        // Rule: Only block if the asset is offline (which includes Maintenance per the sync logic)
         if (!room.IsOnline) 
             return new RoomAvailabilityResponse(false, "Asset is currently offline or under maintenance.");
 
@@ -78,7 +88,6 @@ public class RoomService : IRoomService
         var existingRoom = await _roomRepo.GetByRoomNumberAsync(request.RoomNumber);
         if (existingRoom != null) throw new Exception($"Conflict: Room unit '{request.RoomNumber}' is already registered.");
 
-        // Rule: Maintenance status forces IsOnline to false. All other statuses force IsOnline to true.
         bool syncedOnlineStatus = request.Status != RoomStatus.Maintenance;
 
         var room = new Room
@@ -116,7 +125,6 @@ public class RoomService : IRoomService
         room.Description = request.Description;
         room.Amenities = request.Amenities;
 
-        // Rule: Sync IsOnline with Maintenance status
         room.IsOnline = request.Status != RoomStatus.Maintenance;
 
         await _roomRepo.UpdateAsync(room);

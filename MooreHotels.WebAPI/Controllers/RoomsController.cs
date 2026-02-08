@@ -15,8 +15,11 @@ public class RoomsController : ControllerBase
 
     [HttpGet]
     [AllowAnonymous]
-    public async Task<IActionResult> GetRooms([FromQuery] RoomCategory? category) 
-        => Ok(await _roomService.GetAllRoomsAsync(category));
+    public async Task<IActionResult> GetRooms(
+        [FromQuery] RoomCategory? category, 
+        [FromQuery] int? page, 
+        [FromQuery] int? pageSize) 
+        => Ok(await _roomService.GetAllRoomsAsync(category, page, pageSize));
 
     [HttpGet("search")]
     [AllowAnonymous]
@@ -25,9 +28,12 @@ public class RoomsController : ControllerBase
         [FromQuery] DateTime? checkOut, 
         [FromQuery] RoomCategory? category,
         [FromQuery] string? roomNumber,
-        [FromQuery] string? amenity)
+        [FromQuery] string? amenity,
+        [FromQuery] int? capacity,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize)
     {
-        var request = new RoomSearchRequest(checkIn, checkOut, category, 1, roomNumber, amenity);
+        var request = new RoomSearchRequest(checkIn, checkOut, category, capacity, roomNumber, amenity, page, pageSize);
         return Ok(await _roomService.SearchRoomsAsync(request));
     }
 
@@ -51,16 +57,34 @@ public class RoomsController : ControllerBase
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> CreateRoom([FromBody] CreateRoomRequest request)
     {
-        var dto = await _roomService.CreateRoomAsync(request);
-        return CreatedAtAction(nameof(GetRoom), new { id = dto.Id }, dto);
+        try
+        {
+            var dto = await _roomService.CreateRoomAsync(request);
+            return CreatedAtAction(nameof(GetRoom), new { id = dto.Id }, dto);
+        }
+        catch (Exception ex) when (ex.Message.Contains("Conflict"))
+        {
+            return Conflict(new { Message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> UpdateRoom(Guid id, [FromBody] UpdateRoomRequest request)
     {
-        await _roomService.UpdateRoomAsync(id, request);
-        return NoContent();
+        try
+        {
+            await _roomService.UpdateRoomAsync(id, request);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = ex.Message });
+        }
     }
 
     [HttpDelete("{id}")]
