@@ -115,6 +115,7 @@ public class RoomService : IRoomService
         room.Capacity = request.Capacity;
         room.Description = request.Description;
         room.Amenities = request.Amenities;
+        room.Images = request.Images;
 
         // Rule: Sync IsOnline with Maintenance status
         room.IsOnline = request.Status != RoomStatus.Maintenance;

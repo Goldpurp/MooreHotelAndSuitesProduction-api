@@ -4,10 +4,12 @@ namespace MooreHotels.Application.DTOs;
 
 public record UpdateRoomRequest(
     string Name, 
-    RoomCategory Category, 
+    RoomCategory Category,
+    PropertyFloor Floor, 
     RoomStatus Status, 
     decimal PricePerNight, 
     int Capacity, 
     bool IsOnline, 
     string Description, 
-    List<string> Amenities);
+    List<string> Amenities,
+    List<string> Images);
