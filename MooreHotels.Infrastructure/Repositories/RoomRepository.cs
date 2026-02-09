@@ -16,45 +16,30 @@ public class RoomRepository : IRoomRepository
     public async Task<Room?> GetByRoomNumberAsync(string roomNumber) => 
         await _db.Rooms.FirstOrDefaultAsync(r => r.RoomNumber == roomNumber);
 
-    public async Task<(IEnumerable<Room> Items, int TotalCount)> GetAllAsync(bool onlyOnline = true, int? page = null, int? pageSize = null)
+    public async Task<IEnumerable<Room>> GetAllAsync(bool onlyOnline = true)
     {
         var query = _db.Rooms.AsQueryable();
         if (onlyOnline) query = query.Where(r => r.IsOnline);
-
-        int totalCount = await query.CountAsync();
-
-        if (page.HasValue && pageSize.HasValue)
-        {
-            query = query.OrderBy(r => r.RoomNumber)
-                         .Skip((page.Value - 1) * pageSize.Value)
-                         .Take(pageSize.Value);
-        }
-        else
-        {
-            query = query.OrderBy(r => r.RoomNumber);
-        }
-
-        var items = await query.ToListAsync();
-        return (items, totalCount);
+        return await query.ToListAsync();
     }
 
-    public async Task<(IEnumerable<Room> Items, int TotalCount)> SearchAsync(
+    public async Task<IEnumerable<Room>> SearchAsync(
         DateTime? checkIn, 
         DateTime? checkOut, 
         RoomCategory? category, 
         int? capacity,
         string? roomNumber,
-        string? amenity,
-        int? page = null,
-        int? pageSize = null)
+        string? amenity)
     {
         var query = _db.Rooms.AsQueryable();
 
         if (checkIn.HasValue && checkOut.HasValue)
         {
-            var start = DateTime.SpecifyKind(checkIn.Value, DateTimeKind.Utc);
-            var end = DateTime.SpecifyKind(checkOut.Value, DateTimeKind.Utc);
+            var start = checkIn.Value;
+            var end = checkOut.Value;
 
+            // EXCLUDE Cancelled and CheckedOut bookings. 
+            // Use exact timestamp comparison for the 3PM/11AM policy overlap.
             var bookedRoomIds = await _db.Bookings
                 .Where(b => b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.CheckedOut)
                 .Where(b => b.CheckIn < end && b.CheckOut > start)
@@ -74,31 +59,18 @@ public class RoomRepository : IRoomRepository
         if (capacity.HasValue && capacity.Value > 0) 
             query = query.Where(r => r.Capacity >= capacity.Value);
 
+        // Inventory Control: Only return rooms that are strictly marked as 'Online'.
+        // Rooms under maintenance are forced offline via the Service logic.
         query = query.Where(r => r.IsOnline);
 
-        // Pre-pagination filter for amenities (complex check)
+        var rooms = await query.ToListAsync();
+
         if (!string.IsNullOrWhiteSpace(amenity))
         {
-            // Note: Since amenities is a jsonb list, we search using EF.Functions or materialization
-            // For simplicity in this implementation, we use a string contains if searched
-            query = query.Where(r => EF.Functions.JsonContains(r.Amenities, $"[\"{amenity}\"]"));
+            rooms = rooms.Where(r => r.Amenities.Any(a => a.Contains(amenity, StringComparison.OrdinalIgnoreCase))).ToList();
         }
 
-        int totalCount = await query.CountAsync();
-
-        if (page.HasValue && pageSize.HasValue)
-        {
-            query = query.OrderBy(r => r.RoomNumber)
-                         .Skip((page.Value - 1) * pageSize.Value)
-                         .Take(pageSize.Value);
-        }
-        else
-        {
-            query = query.OrderBy(r => r.RoomNumber);
-        }
-
-        var items = await query.ToListAsync();
-        return (items, totalCount);
+        return rooms;
     }
 
     public async Task AddAsync(Room room)

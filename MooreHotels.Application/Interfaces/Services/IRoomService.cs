@@ -5,8 +5,8 @@ namespace MooreHotels.Application.Interfaces.Services;
 
 public interface IRoomService
 {
-    Task<PagedResultDto<RoomDto>> GetAllRoomsAsync(RoomCategory? category = null, int? page = null, int? pageSize = null);
-    Task<PagedResultDto<RoomDto>> SearchRoomsAsync(RoomSearchRequest request);
+    Task<IEnumerable<RoomDto>> GetAllRoomsAsync(RoomCategory? category = null);
+    Task<IEnumerable<RoomDto>> SearchRoomsAsync(RoomSearchRequest request);
     Task<RoomDto?> GetRoomByIdAsync(Guid id);
     Task<RoomDto> CreateRoomAsync(CreateRoomRequest request);
     Task UpdateRoomAsync(Guid id, UpdateRoomRequest request);

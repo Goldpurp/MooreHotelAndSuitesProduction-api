@@ -8,6 +8,4 @@ public record RoomSearchRequest(
     RoomCategory? Category = null, 
     int? Capacity = null,
     string? RoomNumber = null,
-    string? Amenity = null,
-    int? Page = null,
-    int? PageSize = null);
+    string? Amenity = null);
