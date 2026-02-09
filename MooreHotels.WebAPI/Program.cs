@@ -139,6 +139,7 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IOperationService, OperationService>();
 builder.Services.AddScoped<INotificationService, MooreHotels.Infrastructure.Services.NotificationService>();
+builder.Services.AddScoped<IImageService, CloudinaryService>();
 
 // --- 6. SWAGGER ---
 builder.Services.AddEndpointsApiExplorer();
@@ -160,6 +161,11 @@ builder.Services.AddSwaggerGen(c => {
         }
     });
 });
+
+builder.Services.Configure<CloudinarySettings>(
+    builder.Configuration.GetSection("CloudinarySettings"));
+
+
 
 var app = builder.Build();
 
