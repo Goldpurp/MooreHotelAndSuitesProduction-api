@@ -18,6 +18,13 @@ using MooreHotels.WebAPI.Middleware;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.Json;
+using DotNetEnv;
+
+
+if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+{
+    Env.Load();
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
