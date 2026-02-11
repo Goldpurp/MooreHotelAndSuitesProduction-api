@@ -9,15 +9,23 @@ public class CloudinaryService : IImageService
 {
     private readonly Cloudinary _cloudinary;
 
-    public CloudinaryService(IOptions<CloudinarySettings> config)
-    {
-        var account = new Account(
-            config.Value.CloudName,
-            config.Value.ApiKey,
-            config.Value.ApiSecret);
+public CloudinaryService(IOptions<CloudinarySettings> config)
+{
+    var settings = config.Value;
 
-        _cloudinary = new Cloudinary(account);
+    if (string.IsNullOrWhiteSpace(settings.CloudName) ||
+        string.IsNullOrWhiteSpace(settings.ApiKey) ||
+        string.IsNullOrWhiteSpace(settings.ApiSecret))
+    {
+        throw new ArgumentException("Cloudinary settings must be provided (CloudName, ApiKey, ApiSecret).");
     }
+
+    _cloudinary = new Cloudinary(new Account(
+        settings.CloudName,
+        settings.ApiKey,
+        settings.ApiSecret));
+}
+
 
     public async Task<string> UploadImageAsync(IFormFile file)
     {

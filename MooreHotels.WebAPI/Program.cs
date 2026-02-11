@@ -150,13 +150,14 @@ builder.Services.AddScoped<IImageService, CloudinaryService>();
 
 // --- 6. SWAGGER ---
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c => {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Moore Hotels API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme {
         In = ParameterLocation.Header,
         Description = "Please enter JWT with 'Bearer ' prefix",
         Name = "Authorization",
-        Type = SecuritySchemeType.ApiKey,
+        Type = SecuritySchemeType.Http, 
         Scheme = "Bearer"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement {
@@ -193,8 +194,13 @@ using (var scope = app.Services.CreateScope()) {
 }
 
 // --- 8. MIDDLEWARE PIPELINE ---
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c => {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Moore Hotels API v1");
+    });
+}
 
 if (!app.Environment.IsDevelopment()) {
     app.UseHsts();
