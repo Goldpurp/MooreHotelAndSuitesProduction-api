@@ -1,25 +1,25 @@
+using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MooreHotels.Application.DTOs;
 using MooreHotels.Application.Interfaces;
 using MooreHotels.Application.Interfaces.Repositories;
 using MooreHotels.Application.Interfaces.Services;
 using MooreHotels.Application.Services;
 using MooreHotels.Domain.Entities;
+using MooreHotels.Infrastructure.Hubs;
 using MooreHotels.Infrastructure.Identity;
 using MooreHotels.Infrastructure.Persistence;
 using MooreHotels.Infrastructure.Repositories;
 using MooreHotels.Infrastructure.Seed;
 using MooreHotels.Infrastructure.Services;
-using MooreHotels.Infrastructure.Hubs;
 using MooreHotels.WebAPI.Middleware;
 using System.Text;
-using System.Text.Json.Serialization;
 using System.Text.Json;
-using DotNetEnv;
-
+using System.Text.Json.Serialization;
 
 if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
 {
@@ -79,7 +79,7 @@ builder.Services.ConfigureApplicationCookie(options => {
     };
 });
 
-// --- 3. PRODUCTION-GRADE CORS ---
+// --- 3. CORS ---
 // builder.Services.AddCors(options => {
 //     options.AddDefaultPolicy(policy => {
 //         if (builder.Environment.IsDevelopment()) {
@@ -93,6 +93,7 @@ builder.Services.ConfigureApplicationCookie(options => {
 //         }
 //     });
 // });
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -127,6 +128,10 @@ builder.Services.AddAuthorization();
 builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 
+// --- SETTINGS BINDING ---
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
+
 // --- 5. DEPENDENCY INJECTION ---
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
@@ -157,7 +162,7 @@ builder.Services.AddSwaggerGen(c => {
         In = ParameterLocation.Header,
         Description = "Please enter JWT with 'Bearer ' prefix",
         Name = "Authorization",
-        Type = SecuritySchemeType.Http, 
+        Type = SecuritySchemeType.Http,
         Scheme = "Bearer"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement {
@@ -169,11 +174,6 @@ builder.Services.AddSwaggerGen(c => {
         }
     });
 });
-
-builder.Services.Configure<CloudinarySettings>(
-    builder.Configuration.GetSection("CloudinarySettings"));
-
-
 
 var app = builder.Build();
 
@@ -211,11 +211,10 @@ app.UseRouting();
 app.UseCors();
 
 app.UseAuthentication();
-// CRITICAL: Check user status immediately after authentication to invalidate tokens of suspended users
-app.UseUserStatusInvasion(); 
+app.UseUserStatusInvasion();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 
-app.Run();
+await app.RunAsync();

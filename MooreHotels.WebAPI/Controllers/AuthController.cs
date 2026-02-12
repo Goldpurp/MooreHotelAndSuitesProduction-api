@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using MooreHotels.Application.DTOs;
+using MooreHotels.Application.Interfaces;
 using MooreHotels.Application.Interfaces.Repositories;
 using MooreHotels.Application.Interfaces.Services;
 using MooreHotels.Domain.Entities;
 using MooreHotels.Domain.Enums;
 using MooreHotels.Infrastructure.Identity;
+using System.Text;
 
 namespace MooreHotels.WebAPI.Controllers;
 
@@ -16,17 +19,20 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IJwtService _jwtService;
     private readonly IGuestRepository _guestRepo;
+    private readonly IEmailService _emailService;
     private readonly IProfileService _profileService;
 
     public AuthController(
         UserManager<ApplicationUser> userManager, 
         IJwtService jwtService, 
         IGuestRepository guestRepo,
+        IEmailService emailService,
         IProfileService profileService)
     {
         _userManager = userManager;
         _jwtService = jwtService;
         _guestRepo = guestRepo;
+        _emailService = emailService;
         _profileService = profileService;
     }
 
@@ -35,68 +41,96 @@ public class AuthController : ControllerBase
     {
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user == null || !await _userManager.CheckPasswordAsync(user, request.Password))
-            return Unauthorized(new { Message = "Invalid email or password." });
+            return Unauthorized(new { Message = "Access Denied: Invalid credentials." });
+
+        if (!user.EmailConfirmed)
+            return Unauthorized(new { Message = "Identity Pending: Please verify your email to access the system." });
 
         if (user.Status == ProfileStatus.Suspended)
-            return StatusCode(403, new { Message = "Access denied. Your account has been suspended by an administrator." });
+            return StatusCode(403, new { Message = "Account Restricted: Please contact system administration." });
 
         var token = _jwtService.GenerateToken(user);
         return Ok(new AuthResponse(token, user.Email!, user.Name, user.Role.ToString()));
     }
 
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+[HttpPost("register")]
+public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+{
+    var existing = await _userManager.FindByEmailAsync(request.Email);
+    if (existing != null) return BadRequest(new { Message = "Email collision detected." });
+
+    var user = new ApplicationUser 
     {
-        var existing = await _userManager.FindByEmailAsync(request.Email);
-        if (existing != null) return BadRequest(new { Message = "This email address is already registered." });
+        Id = Guid.NewGuid(), Email = request.Email, UserName = request.Email,
+        Name = $"{request.FirstName} {request.LastName}", Role = UserRole.Client,
+        Status = ProfileStatus.Active, PhoneNumber = request.Phone, CreatedAt = DateTime.UtcNow,
+        EmailConfirmed = false
+    };
 
-        var assignedRole = UserRole.Client;
-        
-        var fullName = $"{request.FirstName} {request.LastName}";
-        var user = new ApplicationUser
+    var result = await _userManager.CreateAsync(user, request.Password);
+    if (!result.Succeeded) return BadRequest(new { Errors = result.Errors.Select(e => e.Description) });
+
+    await _userManager.AddToRoleAsync(user, UserRole.Client.ToString());
+
+    var guest = new Guest {
+        Id = $"GS-{new Random().Next(1000, 9999)}", FirstName = request.FirstName,
+        LastName = request.LastName, Email = request.Email, Phone = request.Phone, CreatedAt = DateTime.UtcNow
+    };
+    await _guestRepo.AddAsync(guest);
+
+    // Email logic with Error Handling
+    var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+    var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+    var origin = Request.Headers["Origin"].ToString() ?? $"{Request.Scheme}://{Request.Host}";
+    var verificationLink = $"{origin}/verify-email?userId={user.Id}&token={encodedToken}";
+
+    try 
+    {
+        await _emailService.SendEmailVerificationAsync(user.Email!, user.Name, verificationLink);
+    }
+    // catch (Exception)
+    // {
+    //     return Ok(new { Message = "Account created, but we couldn't send the verification email. Please use 'Forgot Password' to resend." });
+    // }
+    catch (Exception ex)
+{
+    // Temporary: This will show you the EXACT reason it's failing
+    return StatusCode(500, new { 
+        Message = "Email Error", 
+        Detail = ex.Message, 
+        Inner = ex.InnerException?.Message 
+    });
+}
+
+    return Ok(new { Message = "Registration Successful: Check your email for activation instructions." });
+}
+
+
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string userId, [FromQuery] string token)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) return BadRequest(new { Message = "System Error: User identifier not found." });
+
+        // Production-Grade Token Decoding
+        try 
         {
-            Id = Guid.NewGuid(),
-            Email = request.Email,
-            UserName = request.Email,
-            Name = fullName,
-            Role = assignedRole,
-            Status = ProfileStatus.Active,
-            PhoneNumber = request.Phone,
-            CreatedAt = DateTime.UtcNow,
-            EmailConfirmed = true 
-        };
-
-        var result = await _userManager.CreateAsync(user, request.Password);
-        if (!result.Succeeded) return BadRequest(new { Errors = result.Errors.Select(e => e.Description) });
-
-        await _userManager.AddToRoleAsync(user, assignedRole.ToString());
-
-        var guest = new Guest
+            var decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(token));
+            var result = await _userManager.ConfirmEmailAsync(user, decodedToken);
+            if (result.Succeeded) return Ok(new { Message = "Identity Verified: Your account is now active." });
+        }
+        catch 
         {
-            Id = $"GS-{new Random().Next(1000, 9999)}",
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            Email = request.Email,
-            Phone = request.Phone,
-            CreatedAt = DateTime.UtcNow
-        };
-        await _guestRepo.AddAsync(guest);
+            return BadRequest(new { Message = "Security Failure: Token is corrupted or expired." });
+        }
 
-        var token = _jwtService.GenerateToken(user);
-        return Ok(new AuthResponse(token, user.Email!, user.Name, user.Role.ToString()));
+        return BadRequest(new { Message = "Identity Verification Failed." });
     }
 
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
-        try
-        {
-            await _profileService.ForgotPasswordAsync(request.Email);
-            return Ok(new { Message = "If an account is associated with this email, a temporary password has been dispatched." });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
+        await _profileService.ForgotPasswordAsync(request.Email);
+        return Ok(new { Message = "If an account exists, security instructions have been dispatched." });
     }
 }
