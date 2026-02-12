@@ -1,6 +1,7 @@
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using MooreHotels.Application.Interfaces;
+using MooreHotels.Application.DTOs;
 using MailKit.Net.Smtp;
 using MimeKit;
 
@@ -8,92 +9,97 @@ namespace MooreHotels.Infrastructure.Services;
 
 public class EmailService : IEmailService
 {
-    private readonly IConfiguration _config;
+    private readonly EmailSettings _settings;
     private readonly ILogger<EmailService> _logger;
 
-    public EmailService(IConfiguration config, ILogger<EmailService> logger)
+    public EmailService(IOptions<EmailSettings> settings, ILogger<EmailService> logger)
     {
-        _config = config;
+        _settings = settings.Value;
         _logger = logger;
     }
 
     private async Task SendEmailAsync(string toEmail, string subject, string body)
     {
+        var email = new MimeMessage();
+        email.From.Add(new MailboxAddress(_settings.SenderName, _settings.SenderEmail));
+        email.To.Add(MailboxAddress.Parse(toEmail));
+        email.Subject = subject;
+
+        var builder = new BodyBuilder { HtmlBody = body };
+        email.Body = builder.ToMessageBody();
+
+        using var smtp = new SmtpClient();
         try
         {
-            var email = new MimeMessage();
-            email.From.Add(new MailboxAddress(_config["EmailSettings:SenderName"], _config["EmailSettings:SenderEmail"]));
-            email.To.Add(MailboxAddress.Parse(toEmail));
-            email.Subject = subject;
+            await smtp.ConnectAsync(_settings.SmtpServer, _settings.SmtpPort, MailKit.Security.SecureSocketOptions.StartTls);
+            
+            if (!string.IsNullOrEmpty(_settings.SmtpUser))
+                await smtp.AuthenticateAsync(_settings.SmtpUser, _settings.SmtpPass);
 
-            var builder = new BodyBuilder { HtmlBody = body };
-            email.Body = builder.ToMessageBody();
-
-            using var smtp = new SmtpClient();
-            await smtp.ConnectAsync(_config["EmailSettings:SmtpServer"], int.Parse(_config["EmailSettings:SmtpPort"] ?? "587"), MailKit.Security.SecureSocketOptions.StartTls);
-            await smtp.AuthenticateAsync(_config["EmailSettings:SmtpUser"], _config["EmailSettings:SmtpPass"]);
             await smtp.SendAsync(email);
             await smtp.DisconnectAsync(true);
+            
+            _logger.LogInformation("Email dispatched: {Subject} to {Email}", subject, toEmail);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to {Email}", toEmail);
+            _logger.LogError(ex, "SMTP failure sending to {Email}", toEmail);
+            throw; // Re-throw to allow the Controller to handle the failure
         }
     }
 
-    public async Task SendBookingConfirmationAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn)
+    // Guest Communications
+    public async Task SendBookingConfirmationAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn) 
+        => await SendEmailAsync(email, $"Booking Confirmed: {bookingCode}", $"<p>Hi {guestName}, booking {bookingCode} for {roomName} on {checkIn:MMM dd} is confirmed.</p>");
+
+    public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode) 
+        => await SendEmailAsync(email, "Booking Cancelled", $"<p>Booking {bookingCode} has been voided.</p>");
+
+    public async Task SendCheckInReminderAsync(string email, string guestName, string bookingCode, DateTime checkIn) 
+        => await SendEmailAsync(email, "Check-in Tomorrow", $"<p>We look forward to seeing you for stay {bookingCode} tomorrow.</p>");
+
+    public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword) 
+        => await SendEmailAsync(email, "Password Reset", $"<p>Hello {guestName}, your temporary password is: <strong>{tempPassword}</strong></p>");
+
+    public async Task SendEmailVerificationAsync(string email, string name, string link)
     {
-        var subject = $"Booking Confirmation - {bookingCode}";
-        var body = $@"
-            <div style='font-family: Arial, sans-serif; color: #333;'>
-                <h1>Hello {guestName},</h1>
-                <p>Your booking at Moore Hotels & Suites is confirmed!</p>
-                <p><strong>Booking Code:</strong> {bookingCode}</p>
-                <p><strong>Room:</strong> {roomName}</p>
-                <p><strong>Check-in Date:</strong> {checkIn:MMM dd, yyyy}</p>
-                <p>We look forward to hosting you.</p>
-            </div>";
+        var subject = "Verification Required: Moore Hotels";
+        var body = $@"<div style='font-family: sans-serif; max-width: 600px; padding: 20px; border: 1px solid #eee;'>
+            <h2 style='color: #d4af37;'>Verify Your Identity</h2>
+            <p>Hello {name}, please confirm your email to activate your profile:</p>
+            <a href='{link}' style='display: inline-block; background: #d4af37; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Activate Account</a>
+        </div>";
         await SendEmailAsync(email, subject, body);
     }
 
-    public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode)
+    public async Task SendPaymentSuccessAsync(string email, string guestName, string bookingCode, decimal amount, string reference) 
+        => await SendEmailAsync(email, "Payment Verified", $"<p>Received NGN {amount:N2} for {bookingCode}. Ref: {reference}</p>");
+
+    public async Task SendCheckOutThankYouAsync(string email, string guestName, string bookingCode) 
+        => await SendEmailAsync(email, "Thank You", $"<p>Thank you for staying at Moore Hotels! Code: {bookingCode}</p>");
+
+    // Admin & Security
+    public async Task SendAdminNewBookingAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, decimal amount) 
+        => await SendEmailAsync(adminEmail, "ALERT: New Booking", $"<p>New booking {bookingCode} from {guestName}. Value: NGN {amount:N2}</p>");
+
+    public async Task SendStaffWelcomeEmailAsync(string email, string name, string tempPassword, string role) 
+        => await SendEmailAsync(email, "Welcome to the Team", $"<p>Welcome {name}, your account is set up as {role}. Temp pass: {tempPassword}</p>");
+
+    public async Task SendAccountSuspendedAsync(string email, string name, string? reason = null)
     {
-        var subject = $"Booking Cancellation - {bookingCode}";
-        var body = $@"
-            <div style='font-family: Arial, sans-serif; color: #333;'>
-                <h1>Hello {guestName},</h1>
-                <p>Your booking with code <strong>{bookingCode}</strong> has been cancelled.</p>
-                <p>If this was a mistake, please contact our support team immediately.</p>
-            </div>";
+        var subject = "Security Alert: Access Suspended";
+        var body = $@"<div style='border: 2px solid #e11d48; padding: 20px;'>
+            <h1 style='color: #e11d48;'>Account Suspended</h1>
+            <p>Hello {name}, your access has been suspended.</p>
+            <p>Reason: {reason ?? "Administrative review."}</p>
+        </div>";
         await SendEmailAsync(email, subject, body);
     }
 
-    public async Task SendCheckInReminderAsync(string email, string guestName, string bookingCode, DateTime checkIn)
+    public async Task SendAccountActivatedAsync(string email, string name)
     {
-        var subject = $"Reminder: Your Stay Starts Tomorrow! - {bookingCode}";
-        var body = $@"
-            <div style='font-family: Arial, sans-serif; color: #333;'>
-                <h1>Hello {guestName},</h1>
-                <p>This is a friendly reminder of your upcoming stay with us starting tomorrow, {checkIn:MMM dd, yyyy}.</p>
-                <p>Safe travels!</p>
-            </div>";
-        await SendEmailAsync(email, subject, body);
-    }
-
-    public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword)
-    {
-        var subject = "Temporary Access Password - Moore Hotels & Suites";
-        var body = $@"
-            <div style='font-family: Arial, sans-serif; color: #333;'>
-                <h1>Hello {guestName},</h1>
-                <p>You have requested a password reset for your account at Moore Hotels & Suites.</p>
-                <p>Please use the following temporary password to log in:</p>
-                <div style='background: #f4f4f4; padding: 15px; border-radius: 8px; font-size: 20px; font-weight: bold; text-align: center; margin: 20px 0;'>
-                    {tempPassword}
-                </div>
-                <p><strong>Important:</strong> After logging in, we strongly recommend changing this to your preferred password immediately via your profile settings.</p>
-                <p>If you did not request this reset, please contact support.</p>
-            </div>";
+        var subject = "Access Restored";
+        var body = $"<p>Hello {name}, your Moore Hotels account has been reactivated.</p>";
         await SendEmailAsync(email, subject, body);
     }
 }
