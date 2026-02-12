@@ -2,8 +2,9 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using MooreHotels.Application.Interfaces;
 using MooreHotels.Application.DTOs;
-using MailKit.Net.Smtp;
-using MimeKit;
+using System.Text;
+using System.Text.Json;
+using System.Net.Http.Headers;
 
 namespace MooreHotels.Infrastructure.Services;
 
@@ -11,40 +12,51 @@ public class EmailService : IEmailService
 {
     private readonly EmailSettings _settings;
     private readonly ILogger<EmailService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public EmailService(IOptions<EmailSettings> settings, ILogger<EmailService> logger)
+    public EmailService(IOptions<EmailSettings> settings, ILogger<EmailService> logger, IHttpClientFactory httpClientFactory)
     {
         _settings = settings.Value;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     private async Task SendEmailAsync(string toEmail, string subject, string body)
     {
-        var email = new MimeMessage();
-        email.From.Add(new MailboxAddress(_settings.SenderName, _settings.SenderEmail));
-        email.To.Add(MailboxAddress.Parse(toEmail));
-        email.Subject = subject;
+        var client = _httpClientFactory.CreateClient();
+        
+        // We repurpose 'SmtpPass' to hold your Brevo API Key
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        client.DefaultRequestHeaders.Add("api-key", _settings.SmtpPass);
 
-        var builder = new BodyBuilder { HtmlBody = body };
-        email.Body = builder.ToMessageBody();
+        var payload = new
+        {
+            sender = new { name = _settings.SenderName, email = _settings.SenderEmail },
+            to = new[] { new { email = toEmail } },
+            subject = subject,
+            htmlContent = body
+        };
 
-        using var smtp = new SmtpClient();
         try
         {
-            await smtp.ConnectAsync(_settings.SmtpServer, _settings.SmtpPort, MailKit.Security.SecureSocketOptions.StartTls);
-            
-            if (!string.IsNullOrEmpty(_settings.SmtpUser))
-                await smtp.AuthenticateAsync(_settings.SmtpUser, _settings.SmtpPass);
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            await smtp.SendAsync(email);
-            await smtp.DisconnectAsync(true);
-            
-            _logger.LogInformation("Email dispatched: {Subject} to {Email}", subject, toEmail);
+            var response = await client.PostAsync("https://api.brevo.com/v3/smtp/email", content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _logger.LogError("Brevo API Rejected Email: {Error}", error);
+                throw new Exception("Email delivery failed via API.");
+            }
+
+            _logger.LogInformation("Email sent successfully to {Email}", toEmail);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SMTP failure sending to {Email}", toEmail);
-            throw; // Re-throw to allow the Controller to handle the failure
+            _logger.LogError(ex, "API Connection Error for {Email}", toEmail);
+            throw; 
         }
     }
 
@@ -61,7 +73,7 @@ public class EmailService : IEmailService
     public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword) 
         => await SendEmailAsync(email, "Password Reset", $"<p>Hello {guestName}, your temporary password is: <strong>{tempPassword}</strong></p>");
 
-    public async Task SendEmailVerificationAsync(string email, string name, string link)
+       public async Task SendEmailVerificationAsync(string email, string name, string link)
     {
         var subject = "Verification Required: Moore Hotels";
         var body = $@"<div style='font-family: sans-serif; max-width: 600px; padding: 20px; border: 1px solid #eee;'>
