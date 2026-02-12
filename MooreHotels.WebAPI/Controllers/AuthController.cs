@@ -85,21 +85,13 @@ public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     var verificationLink = $"{origin}/verify-email?userId={user.Id}&token={encodedToken}";
 
     try 
-    {
-        await _emailService.SendEmailVerificationAsync(user.Email!, user.Name, verificationLink);
-    }
-    // catch (Exception)
-    // {
-    //     return Ok(new { Message = "Account created, but we couldn't send the verification email. Please use 'Forgot Password' to resend." });
-    // }
-    catch (Exception ex)
 {
-    // Temporary: This will show you the EXACT reason it's failing
-    return StatusCode(500, new { 
-        Message = "Email Error", 
-        Detail = ex.Message, 
-        Inner = ex.InnerException?.Message 
-    });
+    await _emailService.SendEmailVerificationAsync(user.Email!, user.Name, verificationLink);
+}
+catch (Exception)
+{
+    // Return 200 OK so the user is registered, but warn them about the email
+    return Ok(new { Message = "Account created! We are experiencing a delay with our email service. Please try logging in or check back later." });
 }
 
     return Ok(new { Message = "Registration Successful: Check your email for activation instructions." });

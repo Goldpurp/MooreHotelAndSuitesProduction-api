@@ -127,6 +127,7 @@ builder.Services.AddAuthentication(options => {
 builder.Services.AddAuthorization();
 builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
 
 // --- SETTINGS BINDING ---
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
