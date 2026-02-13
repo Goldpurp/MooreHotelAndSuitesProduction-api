@@ -73,16 +73,81 @@ public class EmailService : IEmailService
     public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword) 
         => await SendEmailAsync(email, "Password Reset", $"<p>Hello {guestName}, your temporary password is: <strong>{tempPassword}</strong></p>");
 
-       public async Task SendEmailVerificationAsync(string email, string name, string link)
-    {
-        var subject = "Verification Required: Moore Hotels";
-        var body = $@"<div style='font-family: sans-serif; max-width: 600px; padding: 20px; border: 1px solid #eee;'>
-            <h2 style='color: #d4af37;'>Verify Your Identity</h2>
-            <p>Hello {name}, please confirm your email to activate your profile:</p>
-            <a href='{link}' style='display: inline-block; background: #d4af37; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Activate Account</a>
-        </div>";
-        await SendEmailAsync(email, subject, body);
-    }
+ public async Task SendEmailVerificationAsync(string email, string name, string link)
+{
+    var subject = "Email Verification – Moore Hotels & Suites";
+
+    var body = $@"
+    <div style='margin:0; padding:0; background-color:#f5f5f5; font-family:Segoe UI, Arial, sans-serif;'>
+
+        <table align='center' width='100%' cellspacing='0' cellpadding='0' style='padding:40px 0;'>
+            <tr>
+                <td align='center'>
+                
+                    <table width='600' cellspacing='0' cellpadding='0' 
+                           style='background:#ffffff; border-radius:10px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+
+                        <!-- Logo -->
+                        <tr>
+                            <td align='center' style='padding:30px 20px; background:#000000;'>
+                                <img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'
+                                     alt='Moore Hotels Logo'
+                                     style='display:block; max-width:200px;' />
+                            </td>
+                        </tr>
+
+                        <!-- Header -->
+                        <tr>
+                            <td style='padding:35px 40px 10px 40px; text-align:center;'>
+                                <h2 style='margin:0; color:#d4af37; font-weight:600; letter-spacing:1px;'>
+                                    Email Verification Required
+                                </h2>
+                            </td>
+                        </tr>
+
+                        <!-- Message -->
+                        <tr>
+                            <td style='padding:20px 40px; color:#333333; font-size:15px; line-height:1.6; text-align:center;'>
+                                Dear <strong>{name}</strong>,<br/><br/>
+                                Thank you for choosing <strong>Moore Hotels & Suites</strong>. 
+                                To complete your registration and activate your account, 
+                                kindly confirm your email address by clicking the button below.
+                            </td>
+                        </tr>
+
+                        <!-- Button -->
+                        <tr>
+                            <td align='center' style='padding:10px 40px 40px 40px;'>
+                                <a href='{link}' 
+                                   style='background:#d4af37; color:#ffffff; text-decoration:none; 
+                                          padding:14px 34px; border-radius:6px; font-size:15px;
+                                          font-weight:600; display:inline-block;'>
+                                   Verify Email Address
+                                </a>
+                            </td>
+                        </tr>
+
+                        <!-- Footer -->
+                        <tr>
+                            <td style='background:#fafafa; padding:25px 30px; text-align:center; 
+                                       font-size:12px; color:#777777;'>
+                                Moore Hotels & Suites<br/>
+                                Luxury Comfort • Exceptional Experience<br/><br/>
+                                If you did not create this account, please ignore this email.
+                            </td>
+                        </tr>
+
+                    </table>
+
+                </td>
+            </tr>
+        </table>
+
+    </div>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
 
     public async Task SendPaymentSuccessAsync(string email, string guestName, string bookingCode, decimal amount, string reference) 
         => await SendEmailAsync(email, "Payment Verified", $"<p>Received NGN {amount:N2} for {bookingCode}. Ref: {reference}</p>");
