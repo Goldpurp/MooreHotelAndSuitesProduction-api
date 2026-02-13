@@ -235,6 +235,189 @@ public class BookingService : IBookingService
 
         return MapToDto(booking);
     }
+    
+public async Task<BookingDto> CancelBookingAsync(Guid bookingId, Guid userId, string? reason = null)
+{
+    var booking = await _bookingRepo.GetByIdAsync(bookingId);
+    if (booking == null) throw new KeyNotFoundException("Booking record not found.");
+
+    if (booking.Status == BookingStatus.Cancelled) return MapToDto(booking);
+
+    if (booking.Status == BookingStatus.CheckedIn || booking.Status == BookingStatus.CheckedOut)
+        throw new InvalidOperationException("Active or completed stays cannot be cancelled.");
+
+    var actingUser = await _userManager.FindByIdAsync(userId.ToString());
+    var oldStatus = booking.Status;
+    var room = await _roomRepo.GetByIdAsync(booking.RoomId);
+
+    if (room != null)
+    {
+        room.Status = RoomStatus.Available;
+        await _roomRepo.UpdateAsync(room);
+    }
+
+    booking.Status = BookingStatus.Cancelled;
+
+    // --- TRIGGER REFUND LOGIC ---
+    if (booking.PaymentStatus == PaymentStatus.Paid)
+    {
+        booking.PaymentStatus = PaymentStatus.RefundPending;
+    }
+
+    var history = JsonSerializer.Deserialize<List<object>>(booking.StatusHistoryJson ?? "[]") ?? new();
+    history.Add(new { 
+        Status = BookingStatus.Cancelled, 
+        Timestamp = DateTime.UtcNow, 
+        Actor = actingUser?.UserName ?? "Staff", 
+        Reason = reason ?? "Cancelled by Admin",
+        PaymentShift = booking.PaymentStatus.ToString() // Will show 'RefundPending' if it was 'Paid'
+    });
+    booking.StatusHistoryJson = JsonSerializer.Serialize(history);
+
+    await _bookingRepo.UpdateAsync(booking);
+
+       // 5. Background Notification
+    _ = Task.Run(async () => {
+        try {
+            await _emailService.SendCancellationNoticeAsync(
+                booking.Guest!.Email, 
+                $"{booking.Guest.FirstName} {booking.Guest.LastName}", 
+                booking.BookingCode, 
+                room?.Name ?? "Reserved Room", 
+                booking.CheckIn, 
+                reason);
+        } catch (Exception ex) {
+            _logger.LogError(ex, "Staff cancellation email failed for {Code}", booking.BookingCode);
+        }
+    });
+
+     if (booking.PaymentStatus == PaymentStatus.RefundPending)
+    {
+        var adminEmail = _config["EmailSettings:SenderEmail"];
+        _ = Task.Run(() => _emailService.SendAdminRefundAlertAsync(
+            adminEmail, 
+            $"{booking.Guest?.FirstName} {booking.Guest?.LastName}", 
+            booking.BookingCode, 
+            room?.Name ?? "Reserved Room", 
+            booking.Amount
+        ));
+    }
+    return MapToDto(booking);
+}
+
+public async Task<BookingDto> CancelBookingByGuestAsync(string bookingCode, string email, string? reason = null)
+{
+    var booking = await _bookingRepo.GetByCodeAsync(bookingCode.Trim().ToUpper());
+    
+    if (booking == null || !booking.Guest!.Email.Equals(email.Trim(), StringComparison.OrdinalIgnoreCase))
+        throw new UnauthorizedAccessException("Verification failed.");
+
+    if (booking.Status == BookingStatus.Cancelled) return MapToDto(booking);
+
+    if (booking.Status == BookingStatus.CheckedIn || booking.Status == BookingStatus.CheckedOut)
+        throw new InvalidOperationException("Stay in progress.");
+
+    var room = await _roomRepo.GetByIdAsync(booking.RoomId);
+    if (room != null)
+    {
+        room.Status = RoomStatus.Available;
+        await _roomRepo.UpdateAsync(room);
+    }
+
+    booking.Status = BookingStatus.Cancelled;
+
+    // --- TRIGGER REFUND LOGIC ---
+    if (booking.PaymentStatus == PaymentStatus.Paid)
+    {
+        booking.PaymentStatus = PaymentStatus.RefundPending;
+    }
+
+    var history = JsonSerializer.Deserialize<List<object>>(booking.StatusHistoryJson ?? "[]") ?? new();
+    history.Add(new { 
+        Status = BookingStatus.Cancelled, 
+        Timestamp = DateTime.UtcNow, 
+        Actor = "Guest", 
+        Reason = reason ?? "Self-service cancellation",
+        PaymentShift = booking.PaymentStatus.ToString()
+    });
+    booking.StatusHistoryJson = JsonSerializer.Serialize(history);
+
+    await _bookingRepo.UpdateAsync(booking);
+
+    _ = Task.Run(async () => {
+        try {
+            await _emailService.SendCancellationNoticeAsync(
+                booking.Guest.Email, 
+                $"{booking.Guest.FirstName} {booking.Guest.LastName}", 
+                booking.BookingCode, 
+                room?.Name ?? "Reserved Room", 
+                booking.CheckIn, 
+                reason);
+        } catch (Exception ex) {
+            _logger.LogError(ex, "Guest cancellation email failed for {Code}", booking.BookingCode);
+        }
+    });
+
+      if (booking.PaymentStatus == PaymentStatus.RefundPending)
+    {
+        var adminEmail = _config["EmailSettings:SenderEmail"];
+        _ = Task.Run(() => _emailService.SendAdminRefundAlertAsync(
+            adminEmail, 
+            $"{booking.Guest!.FirstName} {booking.Guest.LastName}", 
+            booking.BookingCode, 
+            room?.Name ?? "Reserved Room", 
+            booking.Amount
+        ));
+    }
+
+    return MapToDto(booking);
+}
+
+public async Task<BookingDto> CompleteRefundAsync(Guid bookingId, string transactionRef, Guid adminId)
+{
+    var booking = await _bookingRepo.GetByIdAsync(bookingId);
+    if (booking == null) throw new Exception("Booking not found.");
+    
+    if (booking.PaymentStatus != PaymentStatus.RefundPending)
+        throw new Exception("This booking is not flagged for a manual refund.");
+
+    // Update the state
+    booking.PaymentStatus = PaymentStatus.Refunded;
+    booking.TransactionReference = transactionRef; // Store the Bank/Paystack Refund ID
+
+    // Add to history for tracking
+    var history = JsonSerializer.Deserialize<List<object>>(booking.StatusHistoryJson ?? "[]") ?? new();
+    history.Add(new { 
+        Action = "MANUAL_REFUND_COMPLETED", 
+        Timestamp = DateTime.UtcNow, 
+        Reference = transactionRef,
+        AdminId = adminId 
+    });
+    booking.StatusHistoryJson = JsonSerializer.Serialize(history);
+
+    await _bookingRepo.UpdateAsync(booking);
+        _ = Task.Run(async () => {
+        try {
+            await _emailService.SendRefundCompletionNoticeAsync(
+                booking.Guest!.Email, 
+                booking.Guest.FirstName, 
+                booking.BookingCode, 
+                booking.Amount, 
+                transactionRef);
+        } catch (Exception ex) {
+            _logger.LogError(ex, "Failed to send refund completion email for {Code}", booking.BookingCode);
+        }
+    });
+    
+    return MapToDto(booking);
+}
+
+public async Task<IEnumerable<BookingDto>> GetPendingRefundsAsync()
+{
+    var bookings = await _bookingRepo.GetPendingRefundsAsync();
+    return bookings.Select(MapToDto);
+}
+
 
     private static BookingDto MapToDto(Booking b) => new(
         b.Id, b.BookingCode, b.RoomId, b.GuestId, 

@@ -25,7 +25,6 @@ public class EmailService : IEmailService
     {
         var client = _httpClientFactory.CreateClient();
 
-        // We repurpose 'SmtpPass' to hold your Brevo API Key
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         client.DefaultRequestHeaders.Add("api-key", _settings.SmtpPass);
 
@@ -98,34 +97,47 @@ public class EmailService : IEmailService
     }
 
 
-    public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode)
+    public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn, string? reason = null)
     {
         var subject = "Booking Cancelled";
 
-        var body = $@"<div style='background:#f5f5f5;padding:40px 0;font-family:Segoe UI, Arial;'>
-    <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
-      <tr>
-                            <td align='center' style='padding:30px 20px; background:#ffffff;'>
-                                <img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'
-                                     alt='Moore Hotels Logo'
-                                     style='display:block; max-width:200px;' />
-                            </td>
-                        </tr>
+        var body = $@"
+<div style='background:#f5f5f5;padding:40px 0;font-family:Segoe UI, Arial;'>
+<table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+<tr>
+    <td align='center' style='padding:30px 20px; background:#ffffff;'>
+        <img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'
+             alt='Moore Hotels Logo'
+             style='display:block; max-width:200px;' />
+    </td>
+</tr>
 
-        <tr><td style='padding:20px 40px;text-align:center;'>
-            <h2 style='color:#e11d48;'>Booking Cancelled</h2>
-            Dear <strong>{guestName}</strong>,<br/><br/>
-            Your booking <strong>{bookingCode}</strong> has been successfully cancelled.
-        </td></tr>
+<tr>
+<td style='padding:20px 40px;text-align:center;'>
+<h2 style='color:#e11d48;'>Booking Cancelled</h2>
 
-        <tr><td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>
-            Moore Hotels & Suites
-        </td></tr>
-    </table></div>";
+Dear <strong>{guestName}</strong>,<br/><br/>
+
+Your booking <strong>{bookingCode}</strong> for <strong>{roomName}</strong><br/>
+scheduled on <strong>{checkIn:MMM dd, yyyy}</strong> has been successfully cancelled.
+<br/><br/>
+
+{(string.IsNullOrWhiteSpace(reason) ? "" : $"<strong>Reason:</strong> {reason}<br/><br/>")}
+
+If payment was completed, refund processing will follow according to our policy.
+</td>
+</tr>
+
+<tr>
+<td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>
+Moore Hotels & Suites • Luxury Comfort
+</td>
+</tr>
+</table>
+</div>";
 
         await SendEmailAsync(email, subject, body);
     }
-
 
     public async Task SendCheckInReminderAsync(string email, string guestName, string bookingCode, DateTime checkIn)
     {
@@ -332,4 +344,62 @@ public class EmailService : IEmailService
         var body = $"<p>Hello {name}, your Moore Hotels account has been reactivated.</p>";
         await SendEmailAsync(email, subject, body);
     }
+    
+    public async Task SendAdminRefundAlertAsync(string adminEmail, string guestName, string bookingCode, decimal amount)
+{
+    var subject = $"ACTION REQUIRED: Manual Refund Pending - {bookingCode}";
+    var body = $@"
+        <h2 style='color: #d9534f;'>Manual Refund Required</h2>
+        <p>A paid booking has been cancelled and requires manual processing.</p>
+        <ul>
+            <li><strong>Booking Code:</strong> {bookingCode}</li>
+            <li><strong>Guest Name:</strong> {guestName}</li>
+            <li><strong>Amount to Refund:</strong> NGN {amount:N2}</li>
+        </ul>
+        <p>Please process this via your bank or payment gateway and update the status in the Admin Dashboard once completed.</p>";
+
+    await SendEmailAsync(adminEmail, subject, body);
+}
+
+public async Task SendRefundCompletionNoticeAsync(string email, string guestName, string bookingCode, decimal amount, string reference)
+{
+    var subject = $"Refund Processed: {bookingCode}";
+    var body = $@"
+        <h2>Your Refund has been Processed</h2>
+        <p>Hi {guestName},</p>
+        <p>We've successfully processed a manual refund of <strong>NGN {amount:N2}</strong> for your cancelled booking <strong>{bookingCode}</strong>.</p>
+        <p><strong>Transaction Reference:</strong> {reference}</p>
+        <p>Depending on your bank, it may take 3-5 business days for the funds to reflect in your account.</p>
+        <p>Thank you for your patience,<br/>Moore Hotels Team</p>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
+public async Task SendAdminRefundAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, decimal amount)
+{
+    var subject = $"ACTION REQUIRED: Manual Refund Pending - {bookingCode}";
+    
+    // Create a high-priority body for the staff
+    var body = $@"
+        <div style='font-family: Arial, sans-serif; border: 1px solid #d9534f; padding: 20px;'>
+            <h2 style='color: #d9534f;'>Manual Refund Required</h2>
+            <p>A paid booking has been cancelled and requires manual processing to return funds to the guest.</p>
+            <table style='width: 100%; border-collapse: collapse;'>
+                <tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Booking Code:</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{bookingCode}</td></tr>
+                <tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Guest Name:</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{guestName}</td></tr>
+                <tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Room:</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{roomName}</td></tr>
+                <tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Refund Amount:</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>NGN {amount:N2}</td></tr>
+            </table>
+            <p style='margin-top: 20px;'><strong>Next Steps:</strong></p>
+            <ol>
+                <li>Verify the original transaction in your payment gateway (e.g., Paystack).</li>
+                <li>Process the manual refund via your bank/gateway.</li>
+                <li>Log the transaction reference in the Admin Dashboard to mark as <strong>Refunded</strong>.</li>
+            </ol>
+            <p><em>This is an automated alert from Moore Hotels System.</em></p>
+        </div>";
+
+    await SendEmailAsync(adminEmail, subject, body);
+}
+
 }

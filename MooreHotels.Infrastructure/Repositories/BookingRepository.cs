@@ -37,4 +37,16 @@ public class BookingRepository : IBookingRepository
         _db.Bookings.Update(booking);
         await _db.SaveChangesAsync();
     }
+
+    public async Task<IEnumerable<Booking>> GetPendingRefundsAsync()
+{
+    return await _db.Bookings
+        .Include(b => b.Guest)
+        .Include(b => b.Room)
+        .Where(b => b.Status == BookingStatus.Cancelled && 
+                    b.PaymentStatus == PaymentStatus.RefundPending)
+        .OrderByDescending(b => b.CreatedAt)
+        .ToListAsync();
+}
+
 }

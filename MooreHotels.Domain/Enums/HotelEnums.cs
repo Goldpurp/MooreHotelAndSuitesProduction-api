@@ -39,8 +39,9 @@ public enum PaymentStatus
 {
     Paid,
     Unpaid,
-    Partial,
-    AwaitingVerification
+    AwaitingVerification,
+    RefundPending,
+    Refunded 
 }
 
 public enum PaymentMethod

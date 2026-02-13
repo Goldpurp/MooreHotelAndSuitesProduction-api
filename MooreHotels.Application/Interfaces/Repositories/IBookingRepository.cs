@@ -11,4 +11,5 @@ public interface IBookingRepository
     Task<bool> IsRoomBookedAsync(Guid roomId, DateTime checkIn, DateTime checkOut);
     Task AddAsync(Booking booking);
     Task UpdateAsync(Booking booking);
+    Task<IEnumerable<Booking>> GetPendingRefundsAsync();
 }
