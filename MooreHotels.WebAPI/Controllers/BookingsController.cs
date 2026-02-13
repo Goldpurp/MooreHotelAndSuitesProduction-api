@@ -121,4 +121,102 @@ public class BookingsController : ControllerBase
             return BadRequest(new { Message = ex.Message });
         }
     }
+    
+    [HttpPost("{id}/cancel")]
+[Authorize(Roles = "Admin,Manager,Staff")]
+public async Task<IActionResult> CancelBookingAdmin(Guid id, [FromQuery] string? reason = null)
+{
+    // 1. Robust User ID Extraction
+    var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(userIdStr, out var userId))
+    {
+        return Unauthorized(new { Message = "User identity is invalid or expired." });
+    }
+
+    try
+    {
+        var userRole = User.FindFirstValue(ClaimTypes.Role) ?? "Staff";
+        var dto = await _bookingService.CancelBookingAsync(id, userId, reason);
+
+        return Ok(new { 
+            Message = $"Booking successfully voided by {userRole}.", 
+            Data = dto 
+        });
+    }
+    catch (Exception ex)
+    {
+        // 2. Consistent Error Response
+        return BadRequest(new { Message = ex.Message });
+    }
+}
+
+[HttpPost("guest/cancel")]
+[AllowAnonymous]
+public async Task<IActionResult> CancelBookingGuest([FromBody] CancelBookingRequest request)
+{
+    // 3. Model State Check (Ensures BookingCode and Email aren't null)
+    if (!ModelState.IsValid)
+    {
+        return BadRequest(ModelState);
+    }
+
+    try
+    {
+        var dto = await _bookingService.CancelBookingByGuestAsync(
+            request.BookingCode,
+            request.Email,
+            request.Reason
+        );
+
+        return Ok(new { 
+            Message = "Your reservation has been cancelled successfully.", 
+            Data = dto 
+        });
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        // 4. Specific Security Exception Handling
+        return Unauthorized(new { Message = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { Message = ex.Message });
+    }
+}
+
+[HttpPost("{id}/complete-refund")]
+[Authorize(Roles = "Admin,Manager")]
+public async Task<IActionResult> CompleteRefund(Guid id, [FromQuery] string transactionRef)
+{
+    var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (!Guid.TryParse(userIdStr, out var adminId)) return Unauthorized();
+
+    try
+    {
+        var dto = await _bookingService.CompleteRefundAsync(id, transactionRef, adminId);
+        return Ok(new { Message = "Refund marked as completed in system.", Data = dto });
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { Message = ex.Message });
+    }
+}
+
+[HttpGet("pending-refunds")]
+[Authorize(Roles = "Admin,Manager")]
+public async Task<IActionResult> GetPendingRefunds()
+{
+    try
+    {
+        var dtos = await _bookingService.GetPendingRefundsAsync();
+        return Ok(dtos);
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { Message = ex.Message });
+    }
+}
+
+
+
 }
