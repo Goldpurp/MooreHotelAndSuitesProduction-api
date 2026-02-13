@@ -114,29 +114,22 @@ public class AuthController : ControllerBase
     [HttpGet("verify-email")]
 public async Task<IActionResult> VerifyEmail([FromQuery] string userId, [FromQuery] string token)
 {
-    // 1. Find the user
     var user = await _userManager.FindByIdAsync(userId);
     if (user == null) return BadRequest(new { Message = "User not found." });
 
-    // 2. If already confirmed, just exit
     if (user.EmailConfirmed) return Ok(new { Message = "Identity already verified." });
 
     try 
     {
-        // 3. Attempt standard Identity confirmation
         var decodedTokenBytes = WebEncoders.Base64UrlDecode(token);
         var decodedToken = Encoding.UTF8.GetString(decodedTokenBytes);
         var result = await _userManager.ConfirmEmailAsync(user, decodedToken);
         
-        // 4. FORCE UPDATE: Even if result fails, we manually set it to true
-        // and force the UserManager to save it to the DB.
+  
         user.EmailConfirmed = true;
-        
-        // Updating the SecurityStamp ensures the "Identity Pending" check 
-        // in Login recognizes the user is now active.
+  
         await _userManager.UpdateSecurityStampAsync(user);
         
-        // This is the critical line that saves to PostgreSQL
         var updateResult = await _userManager.UpdateAsync(user);
 
         if (updateResult.Succeeded)
@@ -146,9 +139,8 @@ public async Task<IActionResult> VerifyEmail([FromQuery] string userId, [FromQue
 
         return BadRequest(new { Message = "Database Update Failed." });
     }
-    catch (Exception ex)
+    catch (Exception)
     {
-        // Absolute last resort
         user.EmailConfirmed = true;
         await _userManager.UpdateAsync(user);
         return Ok(new { Message = "Identity Verified (Fallback)." });
