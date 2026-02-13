@@ -89,7 +89,7 @@ public class EmailService : IEmailService
 
                         <!-- Logo -->
                         <tr>
-                            <td align='center' style='padding:30px 20px; background:#000000;'>
+                            <td align='center' style='padding:30px 20px; background:#ffffff;'>
                                 <img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'
                                      alt='Moore Hotels Logo'
                                      style='display:block; max-width:200px;' />
@@ -99,7 +99,7 @@ public class EmailService : IEmailService
                         <!-- Header -->
                         <tr>
                             <td style='padding:35px 40px 10px 40px; text-align:center;'>
-                                <h2 style='margin:0; color:#d4af37; font-weight:600; letter-spacing:1px;'>
+                                <h2 style='margin:0; color:#C94B11; font-weight:600; letter-spacing:1px;'>
                                     Email Verification Required
                                 </h2>
                             </td>
