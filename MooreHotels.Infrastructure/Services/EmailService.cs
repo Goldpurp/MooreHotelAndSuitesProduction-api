@@ -61,17 +61,104 @@ public class EmailService : IEmailService
     }
 
     // Guest Communications
-    public async Task SendBookingConfirmationAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn) 
-        => await SendEmailAsync(email, $"Booking Confirmed: {bookingCode}", $"<p>Hi {guestName}, booking {bookingCode} for {roomName} on {checkIn:MMM dd} is confirmed.</p>");
+public async Task SendBookingConfirmationAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn)
+{
+    var subject = $"Booking Confirmed: {bookingCode}";
 
-    public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode) 
-        => await SendEmailAsync(email, "Booking Cancelled", $"<p>Booking {bookingCode} has been voided.</p>");
+    var body = $@"
+    <div style='background:#f5f5f5; padding:40px 0; font-family:Segoe UI, Arial;'>
 
-    public async Task SendCheckInReminderAsync(string email, string guestName, string bookingCode, DateTime checkIn) 
-        => await SendEmailAsync(email, "Check-in Tomorrow", $"<p>We look forward to seeing you for stay {bookingCode} tomorrow.</p>");
+    <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+        <tr><td align='center' style='padding:25px;'>
+            <img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg' style='max-width:200px;'/>
+        </td></tr>
 
-    public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword) 
-        => await SendEmailAsync(email, "Password Reset", $"<p>Hello {guestName}, your temporary password is: <strong>{tempPassword}</strong></p>");
+        <tr><td style='padding:10px 40px;text-align:center;'>
+            <h2 style='color:#C94B11;'>Booking Confirmed</h2>
+        </td></tr>
+
+        <tr><td style='padding:20px 40px;color:#333;text-align:center;line-height:1.6;'>
+            Dear <strong>{guestName}</strong>,<br/><br/>
+            Your reservation <strong>{bookingCode}</strong> for 
+            <strong>{roomName}</strong> on <strong>{checkIn:MMM dd, yyyy}</strong>
+            has been successfully confirmed.
+        </td></tr>
+
+        <tr><td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>
+            Moore Hotels & Suites • Luxury Comfort
+        </td></tr>
+    </table>
+    </div>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
+
+public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode)
+{
+    var subject = "Booking Cancelled";
+
+    var body = $@"<div style='background:#f5f5f5;padding:40px 0;font-family:Segoe UI, Arial;'>
+    <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+        <tr><td align='center' style='padding:25px;'>
+            <img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'/>
+        </td></tr>
+
+        <tr><td style='padding:20px 40px;text-align:center;'>
+            <h2 style='color:#e11d48;'>Booking Cancelled</h2>
+            Dear <strong>{guestName}</strong>,<br/><br/>
+            Your booking <strong>{bookingCode}</strong> has been successfully cancelled.
+        </td></tr>
+
+        <tr><td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>
+            Moore Hotels & Suites
+        </td></tr>
+    </table></div>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
+
+public async Task SendCheckInReminderAsync(string email, string guestName, string bookingCode, DateTime checkIn)
+{
+    var subject = "Check-in Reminder";
+
+    var body = $@"<div style='background:#f5f5f5;padding:40px 0;font-family:Segoe UI, Arial;'>
+    <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+        <tr><td align='center' style='padding:25px;'> <img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'/></td></tr>
+        <tr><td style='padding:20px 40px;text-align:center;'>
+            <h2 style='color:#C94B11;'>We Look Forward To Hosting You</h2>
+            Dear <strong>{guestName}</strong>,<br/><br/>
+            This is a gentle reminder that your stay ({bookingCode}) begins 
+            on <strong>{checkIn:MMM dd}</strong>.
+        </td></tr>
+        <tr><td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>Moore Hotels & Suites</td></tr>
+    </table></div>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
+
+public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword)
+{
+    var subject = "Temporary Password Issued";
+
+    var body = $@"<div style='background:#f5f5f5;padding:40px 0;font-family:Segoe UI, Arial;'>
+    <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+        <tr><td align='center' style='padding:25px;'><img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'/></td></tr>
+
+        <tr><td style='padding:20px 40px;text-align:center;'>
+            Dear <strong>{guestName}</strong>,<br/><br/>
+            Your temporary password is:
+            <div style='font-size:20px;font-weight:bold;margin-top:15px;color:#C94B11'>{tempPassword}</div>
+        </td></tr>
+
+        <tr><td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>Moore Hotels & Suites Security Notice</td></tr>
+    </table></div>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
 
  public async Task SendEmailVerificationAsync(string email, string name, string link)
 {
@@ -149,11 +236,48 @@ public class EmailService : IEmailService
 }
 
 
-    public async Task SendPaymentSuccessAsync(string email, string guestName, string bookingCode, decimal amount, string reference) 
-        => await SendEmailAsync(email, "Payment Verified", $"<p>Received NGN {amount:N2} for {bookingCode}. Ref: {reference}</p>");
+public async Task SendPaymentSuccessAsync(string email, string guestName, string bookingCode, decimal amount, string reference)
+{
+    var subject = "Payment Confirmed";
 
-    public async Task SendCheckOutThankYouAsync(string email, string guestName, string bookingCode) 
-        => await SendEmailAsync(email, "Thank You", $"<p>Thank you for staying at Moore Hotels! Code: {bookingCode}</p>");
+    var body = $@"<div style='background:#f5f5f5;padding:40px 0;font-family:Segoe UI, Arial;'>
+    <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+        <tr><td align='center' style='padding:25px;'><img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'/></td></tr>
+
+        <tr><td style='padding:20px 40px;text-align:center;'>
+            Dear <strong>{guestName}</strong>,<br/><br/>
+            Payment of <strong>NGN {amount:N2}</strong> for booking 
+            <strong>{bookingCode}</strong> has been received.<br/>
+            Reference: {reference}
+        </td></tr>
+
+        <tr><td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>Moore Hotels & Suites</td></tr>
+    </table></div>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
+
+public async Task SendCheckOutThankYouAsync(string email, string guestName, string bookingCode)
+{
+    var subject = "Thank You For Staying With Us";
+
+    var body = $@"<div style='background:#f5f5f5;padding:40px 0;font-family:Segoe UI, Arial;'>
+    <table align='center' width='600' style='background:#fff;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
+        <tr><td align='center' style='padding:25px;'><img src='https://res.cloudinary.com/diovckpyb/image/upload/v1770752301/d6qqrpcxf1cqnkm9mzm5.jpg'/></td></tr>
+
+        <tr><td style='padding:20px 40px;text-align:center;'>
+            Dear <strong>{guestName}</strong>,<br/><br/>
+            Thank you for choosing Moore Hotels & Suites.  
+            We hope your stay ({bookingCode}) was exceptional and we look forward to welcoming you again.
+        </td></tr>
+
+        <tr><td style='background:#fafafa;padding:20px;text-align:center;font-size:12px;color:#777;'>Luxury Comfort • Exceptional Experience</td></tr>
+    </table></div>";
+
+    await SendEmailAsync(email, subject, body);
+}
+
 
     // Admin & Security
     public async Task SendAdminNewBookingAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, decimal amount) 
