@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MooreHotels.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialIdentityTables : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -88,13 +88,12 @@ namespace MooreHotels.Infrastructure.Migrations
                     Category = table.Column<string>(type: "text", nullable: false),
                     Floor = table.Column<string>(type: "text", nullable: false),
                     Status = table.Column<string>(type: "text", nullable: false),
-                    PricePerNight = table.Column<long>(type: "bigint", nullable: false),
-                    Capacity = table.Column<int>(type: "integer", nullable: false),
+                    PricePerNight = table.Column<decimal>(type: "numeric", nullable: false),
+                    Guest = table.Column<int>(type: "integer", nullable: false),
                     Size = table.Column<string>(type: "text", nullable: false),
                     IsOnline = table.Column<bool>(type: "boolean", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: false),
                     Amenities = table.Column<string>(type: "jsonb", nullable: false),
-                    Images = table.Column<string>(type: "jsonb", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -112,6 +111,7 @@ namespace MooreHotels.Infrastructure.Migrations
                     Status = table.Column<string>(type: "text", nullable: false),
                     AvatarUrl = table.Column<string>(type: "text", nullable: true),
                     SecurityPin = table.Column<string>(type: "text", nullable: true),
+                    Department = table.Column<string>(type: "text", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -203,6 +203,27 @@ namespace MooreHotels.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_bookings_rooms_RoomId",
+                        column: x => x.RoomId,
+                        principalTable: "rooms",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "room_images",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Url = table.Column<string>(type: "text", nullable: false),
+                    PublicId = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    RoomId = table.Column<Guid>(type: "uuid", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_room_images", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_room_images_rooms_RoomId",
                         column: x => x.RoomId,
                         principalTable: "rooms",
                         principalColumn: "Id",
@@ -338,6 +359,11 @@ namespace MooreHotels.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_room_images_RoomId",
+                table: "room_images",
+                column: "RoomId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_rooms_RoomNumber",
                 table: "rooms",
                 column: "RoomNumber",
@@ -383,6 +409,9 @@ namespace MooreHotels.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "notifications");
+
+            migrationBuilder.DropTable(
+                name: "room_images");
 
             migrationBuilder.DropTable(
                 name: "user_roles");

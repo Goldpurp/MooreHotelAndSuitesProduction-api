@@ -8,7 +8,7 @@ public record UpdateRoomRequest(
     PropertyFloor Floor, 
     RoomStatus Status, 
     decimal PricePerNight, 
-    int Capacity, 
+    int Guest, 
     bool IsOnline, 
     string Description, 
     List<string> Amenities,

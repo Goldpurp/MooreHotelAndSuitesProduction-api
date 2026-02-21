@@ -174,6 +174,12 @@ builder.Services.AddSwaggerGen(c => {
             Array.Empty<string>()
         }
     });
+
+        c.MapType<IFormFile>(() => new Microsoft.OpenApi.Models.OpenApiSchema 
+    { 
+        Type = "string", 
+        Format = "binary" 
+    });
 });
 
 var app = builder.Build();

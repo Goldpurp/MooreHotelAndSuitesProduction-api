@@ -11,11 +11,11 @@ public class Room
     public PropertyFloor Floor { get; set; }
     public RoomStatus Status { get; set; }
     public decimal PricePerNight { get; set; }
-    public int Capacity { get; set; }
+    public int Guest { get; set; }
     public string Size { get; set; } = string.Empty;
     public bool IsOnline { get; set; }
     public string Description { get; set; } = string.Empty;
     public List<string> Amenities { get; set; } = new();
-    public List<string> Images { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+     public ICollection<RoomImage> Images { get; set; } = new List<RoomImage>();
 }

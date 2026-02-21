@@ -1,4 +1,5 @@
 using MooreHotels.Application.DTOs;
+using MooreHotels.Domain.Enums;
 
 namespace MooreHotels.Application.Interfaces.Services;
 
@@ -9,8 +10,10 @@ public interface IStaffService
     Task<IEnumerable<StaffSummaryDto>> GetAllUsersAsync(); 
     Task OnboardUserAsync(OnboardUserRequest request);
     Task OnboardUserAsync(OnboardUserRequest request, Guid actingUserId);
-    Task ToggleUserStatusAsync(Guid userId);
-    Task ActivateUserAsync(Guid userId); 
-    Task DeactivateUserAsync(Guid userId); 
+    // Task ToggleUserStatusAsync(Guid userId, Guid actingUserId);
+    Task ChangeUserStatusAsync(Guid userId, ProfileStatus newStatus, Guid actingUserId);
+
+    // Task ActivateUserAsync(Guid userId); 
+    // Task DeactivateUserAsync(Guid userId); 
     Task DeleteUserAsync(Guid userId);
 }

@@ -12,9 +12,8 @@ public interface IEmailService
     Task SendCheckOutThankYouAsync(string email, string guestName, string bookingCode);
     Task SendAdminNewBookingAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, decimal amount);
     Task SendStaffWelcomeEmailAsync(string email, string name, string tempPassword, string role);
-    Task SendAccountSuspendedAsync(string email, string name, string? reason = null);
+    Task SendAccountSuspendedAsync(string email, string name);
     Task SendAccountActivatedAsync(string email, string name);
-    Task SendAdminRefundAlertAsync(string adminEmail, string guestName, string bookingCode, decimal amount);
     Task SendRefundCompletionNoticeAsync(string email, string guestName, string bookingCode, decimal amount, string reference);
     Task SendAdminRefundAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, decimal amount);
 }

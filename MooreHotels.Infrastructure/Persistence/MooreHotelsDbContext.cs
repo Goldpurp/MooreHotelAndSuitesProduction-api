@@ -14,6 +14,7 @@ public class MooreHotelsDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public MooreHotelsDbContext(DbContextOptions<MooreHotelsDbContext> options) : base(options) { }
 
     public DbSet<Room> Rooms => Set<Room>();
+    public DbSet<RoomImage> RoomImages => Set<RoomImage>();
     public DbSet<Guest> Guests => Set<Guest>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -40,30 +41,42 @@ public class MooreHotelsDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<ApplicationUser>(entity => { entity.ToTable("users"); });
         builder.Entity<IdentityRole<Guid>>(entity => { entity.ToTable("roles"); });
         builder.Entity<IdentityUserRole<Guid>>(entity => { entity.ToTable("user_roles"); });
-        
-        builder.Entity<Room>(entity => {
+
+        builder.Entity<Room>(entity =>
+        {
             entity.ToTable("rooms");
             entity.HasIndex(e => e.RoomNumber).IsUnique();
             entity.Property(e => e.Category).HasConversion<string>();
             entity.Property(e => e.Floor).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
-            
+
             entity.Property(e => e.Amenities)
                 .HasColumnType("jsonb")
                 .HasConversion(listConverter, listComparer);
 
-            entity.Property(e => e.Images)
-                .HasColumnType("jsonb")
-                .HasConversion(listConverter, listComparer);
+            entity.HasMany(e => e.Images)
+                .WithOne(i => i.Room)
+                .HasForeignKey(i => i.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
-        builder.Entity<Guest>(entity => {
+        builder.Entity<RoomImage>(entity =>
+        {
+            entity.ToTable("room_images");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Url).IsRequired();
+            entity.Property(e => e.PublicId).IsRequired();
+        });
+
+        builder.Entity<Guest>(entity =>
+        {
             entity.ToTable("guests");
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Email).IsUnique();
         });
 
-        builder.Entity<Booking>(entity => {
+        builder.Entity<Booking>(entity =>
+        {
             entity.ToTable("bookings");
             entity.HasIndex(e => e.BookingCode).IsUnique();
             entity.Property(e => e.Status).HasConversion<string>();
@@ -72,17 +85,20 @@ public class MooreHotelsDbContext : IdentityDbContext<ApplicationUser, IdentityR
             entity.Property(e => e.StatusHistoryJson).HasColumnType("jsonb");
         });
 
-        builder.Entity<AuditLog>(entity => {
+        builder.Entity<AuditLog>(entity =>
+        {
             entity.ToTable("audit_logs");
             entity.Property(e => e.OldDataJson).HasColumnType("jsonb");
             entity.Property(e => e.NewDataJson).HasColumnType("jsonb");
         });
 
-        builder.Entity<Notification>(entity => {
+        builder.Entity<Notification>(entity =>
+        {
             entity.ToTable("notifications");
         });
 
-        builder.Entity<ApplicationUser>(entity => {
+        builder.Entity<ApplicationUser>(entity =>
+        {
             entity.Property(e => e.Role).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
         });

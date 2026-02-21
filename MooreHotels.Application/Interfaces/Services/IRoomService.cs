@@ -10,6 +10,7 @@ public interface IRoomService
     Task<RoomDto?> GetRoomByIdAsync(Guid id);
     Task<RoomDto> CreateRoomAsync(CreateRoomRequest request);
     Task UpdateRoomAsync(Guid id, UpdateRoomRequest request);
-    Task DeleteRoomAsync(Guid id);
+    Task<List<string>> DeleteRoomAsync(Guid id);
+    Task AddImagesToRoomAsync(Guid roomId, List<ImageUploadResult> results);
     Task<RoomAvailabilityResponse> CheckAvailabilityAsync(Guid roomId, DateTime checkIn, DateTime checkOut);
 }

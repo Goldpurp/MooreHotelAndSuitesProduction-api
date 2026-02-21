@@ -63,14 +63,25 @@ public class StaffController : ControllerBase
         }
     }
 
-    [HttpPost("accounts/{id}/activate")]
+
+    [HttpPatch("accounts/{id}/status")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> ActivateUser(Guid id)
+    public async Task<IActionResult> ChangeStatus(
+        Guid id,
+        [FromBody] ChangeStatusRequest request)
     {
         try
         {
-            await _staffService.ActivateUserAsync(id);
-            return Ok(new { Message = "Account has been activated." });
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(userIdStr, out var actingUserId))
+                return Unauthorized();
+
+            await _staffService.ChangeUserStatusAsync(
+                id,
+                request.Status,
+                actingUserId);
+
+            return Ok(new { Message = "Account status updated successfully." });
         }
         catch (Exception ex)
         {
@@ -78,20 +89,6 @@ public class StaffController : ControllerBase
         }
     }
 
-    [HttpPost("accounts/{id}/deactivate")]
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> DeactivateUser(Guid id)
-    {
-        try
-        {
-            await _staffService.DeactivateUserAsync(id);
-            return Ok(new { Message = "Account has been suspended." });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { Message = ex.Message });
-        }
-    }
 
     [HttpDelete("accounts/{id}")]
     [Authorize(Roles = "Admin")]

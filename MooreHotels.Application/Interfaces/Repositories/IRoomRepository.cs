@@ -9,14 +9,16 @@ public interface IRoomRepository
     Task<Room?> GetByRoomNumberAsync(string roomNumber);
     Task<IEnumerable<Room>> GetAllAsync(bool onlyOnline = true);
     Task<IEnumerable<Room>> SearchAsync(
-        DateTime? checkIn, 
-        DateTime? checkOut, 
-        RoomCategory? category, 
-        int? capacity,
+        DateTime? checkIn,
+        DateTime? checkOut,
+        RoomCategory? category,
+        int? Guest,
         string? roomNumber,
         string? amenity);
     Task AddAsync(Room room);
     Task UpdateAsync(Room room);
     Task DeleteAsync(Room room);
     Task<bool> ExistsAsync(Guid id);
+    Task<Room?> GetByIdWithImagesAsync(Guid id);
+
 }

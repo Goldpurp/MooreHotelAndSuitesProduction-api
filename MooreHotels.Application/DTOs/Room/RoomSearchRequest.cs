@@ -6,6 +6,6 @@ public record RoomSearchRequest(
     DateTime? CheckIn = null, 
     DateTime? CheckOut = null, 
     RoomCategory? Category = null, 
-    int? Capacity = null,
+    int? Guest = null,
     string? RoomNumber = null,
     string? Amenity = null);

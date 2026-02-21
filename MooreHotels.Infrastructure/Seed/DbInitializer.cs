@@ -49,7 +49,7 @@ public static class DbInitializer
                 {
                     UserName = adminEmail,
                     Email = adminEmail,
-                    Name = "System Administrator",
+                    Name = "More Blessings",
                     Status = ProfileStatus.Active,
                     EmailConfirmed = true,
                     CreatedAt = DateTime.UtcNow

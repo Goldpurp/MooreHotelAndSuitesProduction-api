@@ -14,7 +14,7 @@ public class StaffService : IStaffService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IAuditService _auditService;
     private readonly IEmailService _emailService;
-    private readonly ILogger<StaffService> _logger; // Added for background task safety
+    private readonly ILogger<StaffService> _logger;
 
     private static readonly string[] AllowedDepartments = { "Housekeeping", "Reception", "FrontDesk", "Concierge" };
 
@@ -80,7 +80,7 @@ public class StaffService : IStaffService
         return Task.FromResult(users);
     }
 
-    public async Task OnboardUserAsync(OnboardUserRequest request)
+    public Task OnboardUserAsync(OnboardUserRequest request)
     {
         throw new NotImplementedException("Provisioning protocol requires an acting user ID. Use the appropriate overload.");
     }
@@ -117,7 +117,7 @@ public class StaffService : IStaffService
             Role = request.AssignedRole,
             Status = request.Status,
             Department = (request.AssignedRole == UserRole.Staff || request.AssignedRole == UserRole.Manager) ? request.Department : null,
-            EmailConfirmed = true, // Staff emails are pre-verified by Admin
+            EmailConfirmed = true,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -130,7 +130,6 @@ public class StaffService : IStaffService
 
         await _userManager.AddToRoleAsync(user, request.AssignedRole.ToString());
 
-        // FIX 1: Await critical welcome email to ensure staff receives their temp password
         try
         {
             await _emailService.SendStaffWelcomeEmailAsync(user.Email!, user.Name, request.TemporaryPassword, user.Role.ToString());
@@ -152,88 +151,63 @@ public class StaffService : IStaffService
             });
     }
 
-    public async Task ToggleUserStatusAsync(Guid userId)
-{
-    var user = await _userManager.FindByIdAsync(userId.ToString());
-    if (user == null) throw new Exception("Target user profile not found.");
-
-    // 1. Protection for Root Admins
-    if (user.Role == UserRole.Admin)
-        throw new Exception("Security Violation: System Administrator status is immutable.");
-
-    // 2. Flip the Status
-    var oldStatus = user.Status;
-    user.Status = oldStatus == ProfileStatus.Active ? ProfileStatus.Suspended : ProfileStatus.Active;
-    
-    // 3. The "Invasion" Trigger (Invalidate JWTs if suspending)
-    if (user.Status == ProfileStatus.Suspended)
-    {
-        await _userManager.UpdateSecurityStampAsync(user);
-    }
-
-    var result = await _userManager.UpdateAsync(user);
-
-    if (result.Succeeded)
-    {
-        // 4. Notify the User (Background task so the Admin UI stays fast)
-        _ = Task.Run(async () => {
-            try {
-                if (user.Status == ProfileStatus.Suspended)
-                    await _emailService.SendAccountSuspendedAsync(user.Email!, user.Name);
-                else
-                    await _emailService.SendAccountActivatedAsync(user.Email!, user.Name);
-            } catch (Exception ex) {
-                _logger.LogWarning(ex, "Status change email failed for {Email}", user.Email);
-            }
-        });
-    }
-}
-
-
-    public async Task ActivateUserAsync(Guid userId)
+    public async Task ChangeUserStatusAsync(
+        Guid userId,
+        ProfileStatus newStatus,
+        Guid actingUserId)
     {
         var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user == null) throw new Exception("Profile not found.");
-
-        user.Status = ProfileStatus.Active;
-        var result = await _userManager.UpdateAsync(user);
-
-        if (result.Succeeded)
-        {
-            // Background dispatch for reactivation notification
-            _ = Task.Run(async () =>
-            {
-                try { await _emailService.SendAccountActivatedAsync(user.Email!, user.Name); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Activation email failed for {Email}", user.Email); }
-            });
-        }
-    }
-
-    public async Task DeactivateUserAsync(Guid userId)
-    {
-        var user = await _userManager.FindByIdAsync(userId.ToString());
-        if (user == null) throw new Exception("Profile not found.");
+        if (user == null)
+            throw new Exception("Target user profile not found.");
 
         if (user.Role == UserRole.Admin)
-            throw new Exception("Security Constraint: Administrators cannot be suspended.");
+            throw new Exception("Administrators cannot be modified.");
 
-        user.Status = ProfileStatus.Suspended;
+        if (!Enum.IsDefined(typeof(ProfileStatus), newStatus))
+            throw new Exception("Invalid status value.");
 
-        // FIX 2: RE-STAMP IDENTITY (Total Invasion)
-        // This invalidates existing JWTs if your Middleware/Identity checks the SecurityStamp
-        await _userManager.UpdateSecurityStampAsync(user);
+        var oldStatus = user.Status;
 
-        var result = await _userManager.UpdateAsync(user);
-
-        if (result.Succeeded)
+        if (oldStatus != newStatus)
         {
-            // FIX 3: Robust Background Notification
+            user.Status = newStatus;
+
+            if (newStatus == ProfileStatus.Suspended)
+                await _userManager.UpdateSecurityStampAsync(user);
+
+            var updateResult = await _userManager.UpdateAsync(user);
+            if (!updateResult.Succeeded)
+                throw new Exception("Failed to update account status.");
+        }
+
+        // Background email send to ensure it doesn't block
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
             _ = Task.Run(async () =>
             {
-                try { await _emailService.SendAccountSuspendedAsync(user.Email!, user.Name); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Suspension email failed for {Email}", user.Email); }
+                try
+                {
+                    if (newStatus == ProfileStatus.Active)
+                        await _emailService.SendAccountActivatedAsync(user.Email!, user.Name);
+                    else if (newStatus == ProfileStatus.Suspended)
+                        await _emailService.SendAccountSuspendedAsync(user.Email!, user.Name);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to send status change email for {Email}", user.Email);
+                }
             });
         }
+
+        // Audit log
+        await _auditService.LogActionAsync(
+            actingUserId,
+            "ACCOUNT_STATUS_CHANGED",
+            "User",
+            user.Id.ToString(),
+            new { OldStatus = oldStatus.ToString() },
+            new { NewStatus = newStatus.ToString() }
+        );
     }
 
     public async Task DeleteUserAsync(Guid userId)

@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MooreHotels.Infrastructure.Migrations
 {
     [DbContext(typeof(MooreHotelsDbContext))]
-    [Migration("20260209234726_AddDepartmentToUser")]
-    partial class AddDepartmentToUser
+    [Migration("20260219170547_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -416,9 +416,6 @@ namespace MooreHotels.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
-                    b.Property<int>("Capacity")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("text");
@@ -434,9 +431,8 @@ namespace MooreHotels.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("Images")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
+                    b.Property<int>("Guest")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("IsOnline")
                         .HasColumnType("boolean");
@@ -466,6 +462,33 @@ namespace MooreHotels.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("rooms", (string)null);
+                });
+
+            modelBuilder.Entity("MooreHotels.Domain.Entities.RoomImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PublicId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("RoomId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoomId");
+
+                    b.ToTable("room_images", (string)null);
                 });
 
             modelBuilder.Entity("MooreHotels.Domain.Entities.VisitRecord", b =>
@@ -579,9 +602,25 @@ namespace MooreHotels.Infrastructure.Migrations
                     b.Navigation("Room");
                 });
 
+            modelBuilder.Entity("MooreHotels.Domain.Entities.RoomImage", b =>
+                {
+                    b.HasOne("MooreHotels.Domain.Entities.Room", "Room")
+                        .WithMany("Images")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Room");
+                });
+
             modelBuilder.Entity("MooreHotels.Domain.Entities.Guest", b =>
                 {
                     b.Navigation("Bookings");
+                });
+
+            modelBuilder.Entity("MooreHotels.Domain.Entities.Room", b =>
+                {
+                    b.Navigation("Images");
                 });
 #pragma warning restore 612, 618
         }

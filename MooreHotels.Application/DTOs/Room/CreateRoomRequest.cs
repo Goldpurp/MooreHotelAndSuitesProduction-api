@@ -9,8 +9,7 @@ public record CreateRoomRequest(
     PropertyFloor Floor, 
     RoomStatus Status,
     decimal PricePerNight, 
-    int Capacity, 
+    int Guest, 
     string Size, 
     string Description, 
-    List<string> Amenities, 
-    List<string> Images);
+    List<string> Amenities);

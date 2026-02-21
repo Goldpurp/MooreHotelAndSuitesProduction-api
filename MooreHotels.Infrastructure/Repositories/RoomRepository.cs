@@ -13,33 +13,30 @@ public class RoomRepository : IRoomRepository
 
     public async Task<Room?> GetByIdAsync(Guid id) => await _db.Rooms.FindAsync(id);
 
-    public async Task<Room?> GetByRoomNumberAsync(string roomNumber) => 
+    public async Task<Room?> GetByRoomNumberAsync(string roomNumber) =>
         await _db.Rooms.FirstOrDefaultAsync(r => r.RoomNumber == roomNumber);
 
     public async Task<IEnumerable<Room>> GetAllAsync(bool onlyOnline = true)
     {
-        var query = _db.Rooms.AsQueryable();
+        var query = _db.Rooms.Include(r => r.Images).AsNoTracking().AsQueryable();
         if (onlyOnline) query = query.Where(r => r.IsOnline);
         return await query.ToListAsync();
     }
 
     public async Task<IEnumerable<Room>> SearchAsync(
-        DateTime? checkIn, 
-        DateTime? checkOut, 
-        RoomCategory? category, 
-        int? capacity,
+        DateTime? checkIn,
+        DateTime? checkOut,
+        RoomCategory? category,
+        int? Guest,
         string? roomNumber,
         string? amenity)
     {
-        var query = _db.Rooms.AsQueryable();
+        var query = _db.Rooms.Include(r => r.Images).AsNoTracking().AsQueryable();
 
         if (checkIn.HasValue && checkOut.HasValue)
         {
             var start = checkIn.Value;
             var end = checkOut.Value;
-
-            // EXCLUDE Cancelled and CheckedOut bookings. 
-            // Use exact timestamp comparison for the 3PM/11AM policy overlap.
             var bookedRoomIds = await _db.Bookings
                 .Where(b => b.Status != BookingStatus.Cancelled && b.Status != BookingStatus.CheckedOut)
                 .Where(b => b.CheckIn < end && b.CheckOut > start)
@@ -53,14 +50,12 @@ public class RoomRepository : IRoomRepository
         if (!string.IsNullOrWhiteSpace(roomNumber))
             query = query.Where(r => r.RoomNumber.Contains(roomNumber));
 
-        if (category.HasValue) 
+        if (category.HasValue)
             query = query.Where(r => r.Category == category.Value);
 
-        if (capacity.HasValue && capacity.Value > 0) 
-            query = query.Where(r => r.Capacity >= capacity.Value);
+        if (Guest.HasValue && Guest.Value > 0)
+            query = query.Where(r => r.Guest >= Guest.Value);
 
-        // Inventory Control: Only return rooms that are strictly marked as 'Online'.
-        // Rooms under maintenance are forced offline via the Service logic.
         query = query.Where(r => r.IsOnline);
 
         var rooms = await query.ToListAsync();
@@ -76,14 +71,14 @@ public class RoomRepository : IRoomRepository
     public async Task AddAsync(Room room)
     {
         await _db.Rooms.AddAsync(room);
-        await _db.SaveChangesAsync();
     }
 
-    public async Task UpdateAsync(Room room)
-    {
-        _db.Rooms.Update(room);
-        await _db.SaveChangesAsync();
-    }
+   public Task UpdateAsync(Room room)
+{
+    _db.Rooms.Update(room);
+    return Task.CompletedTask;
+}
+
 
     public async Task DeleteAsync(Room room)
     {
@@ -91,5 +86,18 @@ public class RoomRepository : IRoomRepository
         await _db.SaveChangesAsync();
     }
 
+    public async Task AddToContextAsync(Room room)
+{
+    await _db.Rooms.AddAsync(room);
+}
+
     public async Task<bool> ExistsAsync(Guid id) => await _db.Rooms.AnyAsync(r => r.Id == id);
+
+    public async Task<Room?> GetByIdWithImagesAsync(Guid id)
+    {
+        return await _db.Rooms
+            .Include(r => r.Images)
+            .FirstOrDefaultAsync(r => r.Id == id);
+    }
+
 }
