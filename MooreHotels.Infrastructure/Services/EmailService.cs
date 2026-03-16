@@ -123,52 +123,206 @@ public class EmailService : IEmailService
 </body>
 </html>";
     }
+    
+    private string GetBookingSummaryHtml(string bookingCode, string roomName, string roomCategory, int? capacity, DateTime? checkIn, DateTime? checkOut, int? nights, decimal? amount)
+    {
+        var html = $@"
+        <div style='margin-top:25px; background-color:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; overflow:hidden;'>
+            <div style='background-color:#F1F5F9; padding:12px 20px; border-bottom:1px solid #E2E8F0;'>
+                <span style='font-size:12px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:1px;'>Booking Details</span>
+            </div>
+            <div style='padding:20px;'>
+                <table role='presentation' width='100%' border='0' cellspacing='0' cellpadding='0'>
+                    <tr>
+                        <td style='padding-bottom:15px;'>
+                            <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Booking Reference</div>
+                            <div style='font-size:16px; font-weight:700; color:#1E293B; font-family:monospace;'>{bookingCode}</div>
+                        </td>
+                        <td style='padding-bottom:15px;' align='right'>
+                            <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Room Name</div>
+                            <div style='font-size:16px; font-weight:700; color:#1E293B;'>{roomName}</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style='padding-bottom:15px;'>
+                            <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Room Type</div>
+                            <div style='font-size:14px; color:#475569;'>{roomCategory}</div>
+                        </td>
+                        <td style='padding-bottom:15px;' align='right'>
+                            <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Max Occupancy</div>
+                            <div style='font-size:14px; color:#475569;'>{capacity} Guest(s)</div>
+                        </td>
+                    </tr>";
+
+        if (checkIn.HasValue && checkOut.HasValue)
+        {
+            html += $@"
+                    <tr style='border-top: 1px dashed #E2E8F0;'>
+                        <td style='padding:15px 0;'>
+                            <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Check-In</div>
+                            <div style='font-size:14px; color:#1E293B; font-weight:600;'>{checkIn.Value:MMM dd, yyyy}</div>
+                            <div style='font-size:12px; color:#64748B;'>After 3:00 PM</div>
+                        </td>
+                        <td style='padding:15px 0;' align='right'>
+                            <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Check-Out</div>
+                            <div style='font-size:14px; color:#1E293B; font-weight:600;'>{checkOut.Value:MMM dd, yyyy}</div>
+                            <div style='font-size:12px; color:#64748B;'>Before 11:00 AM</div>
+                        </td>
+                    </tr>";
+        }
+
+        if (nights.HasValue && amount.HasValue)
+        {
+            html += $@"
+                    <tr style='background-color:#F1F5F9;'>
+                        <td style='padding:15px;'>
+                            <div style='font-size:11px; color:#64748B; text-transform:uppercase; margin-bottom:4px;'>Stay Duration</div>
+                            <div style='font-size:14px; color:#1E293B; font-weight:600;'>{nights} Night(s)</div>
+                        </td>
+                        <td style='padding:15px;' align='right'>
+                            <div style='font-size:11px; color:#64748B; text-transform:uppercase; margin-bottom:4px;'>Total Paid</div>
+                            <div style='font-size:18px; color:#16A34A; font-weight:700;'>NGN {amount.Value:N2}</div>
+                        </td>
+                    </tr>";
+        }
+
+        html += @"
+                </table>
+            </div>
+        </div>";
+
+        return html;
+    }
 
 
 
 
     // Guest emails
-    public async Task SendBookingConfirmationAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn)
+    public async Task SendBookingConfirmationAsync(string email, string guestName, string bookingCode, string roomName, string roomCategory, int capacity, DateTime checkIn, DateTime checkOut, int nights, decimal totalAmount)
     {
-        var content = $"Dear <strong>{guestName}</strong>,<br/><br/>Your booking <strong>{bookingCode}</strong> for <strong>{roomName}</strong> on <strong>{checkIn:MMM dd, yyyy}</strong> has been confirmed.";
-        await SendEmailAsync(email, $"Booking Confirmed: {bookingCode}", BuildTemplate("Booking Confirmed", content));
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{guestName}</strong>,</p>
+        <p>Your reservation at <strong>Moore Hotels & Suites</strong> has been successfully confirmed. We are thrilled to host you and are committed to ensuring your stay is exceptional.</p>
+        
+        {GetBookingSummaryHtml(bookingCode, roomName, roomCategory, capacity, checkIn, checkOut, nights, totalAmount)}
+
+        <div style='margin-top:25px; padding:15px; background-color:#FEF9C3; border: 1px solid #FEF08A; border-radius:8px; font-size:14px; color:#854D0E;'>
+            <strong>Important Note:</strong> Please present a valid government-issued ID upon check-in. Our check-in time starts from 3:00 PM.
+        </div>
+        <p style='margin-top:20px;'>If you have any special requests prior to your arrival, simply reply to this email.</p>";
+
+        await SendEmailAsync(email, $"Booking Confirmed: {bookingCode}", BuildTemplate("Room Confirmed", content));
     }
 
-    public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn, string? reason = null)
+    public async Task SendCancellationNoticeAsync(string email, string guestName, string bookingCode, string roomName, string roomCategory, DateTime checkIn, string? reason = null)
     {
-        var content = $@"Dear <strong>{guestName}</strong>,<br/><br/>Your booking for <strong>{roomName}</strong> on <strong>{checkIn:MMM dd, yyyy}</strong> has been cancelled.<br/>{(string.IsNullOrWhiteSpace(reason) ? "" : $"<br/><strong>Reason:</strong> {reason}")}";
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{guestName}</strong>,</p>
+        <p>This email confirms that your reservation for <strong>{roomName}</strong> starting on <strong>{checkIn:MMM dd, yyyy}</strong> has been cancelled.</p>
+        
+        <div style='margin:20px 0; padding:15px; background-color:#FFF1F2; border-left:4px solid #E11D48; color:#9F1239;'>
+            <strong>Reason for Cancellation:</strong><br/>
+            {(!string.IsNullOrWhiteSpace(reason) ? reason : "Requested by guest or management.")}
+        </div>
+
+        {GetBookingSummaryHtml(bookingCode, roomName, roomCategory, 0, checkIn, checkIn, 0, 0)}
+
+        <p style='margin-top:20px; font-size:14px; color:#64748B;'>If this was an error or you wish to re-book, please visit our website or contact our support team.</p>";
+
         await SendEmailAsync(email, $"Booking Cancelled: {bookingCode}", BuildTemplate("Booking Cancelled", content, "#e11d48"));
     }
 
-    public async Task SendCheckInReminderAsync(string email, string guestName, string bookingCode, DateTime checkIn)
+    public async Task SendCheckInReminderAsync(string email, string guestName, string bookingCode, string roomName, DateTime checkIn)
     {
-        var content = $@"Dear <strong>{guestName}</strong>,<br/><br/>Your stay (<strong>{bookingCode}</strong>) begins on <strong>{checkIn:MMM dd, yyyy}</strong>. We look forward to hosting you.";
-        await SendEmailAsync(email, "Check-In Reminder", BuildTemplate("Upcoming Stay Reminder", content));
-    }
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{guestName}</strong>,</p>
+        <p>We are looking forward to your arrival! This is a friendly reminder that your stay in our <strong>{roomName}</strong> begins tomorrow, <strong>{checkIn:MMM dd, yyyy}</strong>.</p>
+        
+        <div style='margin:25px 0; text-align:center;'>
+             <a href='https://moorehotelandsuites.com/my-booking' style='display:inline-block; background-color:#C94B11; color:#FFFFFF; padding:14px 30px; border-radius:8px; text-decoration:none; font-weight:700;'>View Stay Details</a>
+        </div>
 
-    public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword)
+        <p style='font-size:14px; line-height:1.6;'>Standard check-in starts at <strong>3:00 PM</strong>. Safe travels!</p>";
+
+        await SendEmailAsync(email, "Check-In Reminder", BuildTemplate("Your Stay Begins Tomorrow", content));
+    }    public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword)
     {
-        var content = $@"Dear <strong>{guestName}</strong>,<br/><br/>Your temporary password is:<br/><br/><div style='font-size:20px;font-weight:600;color:#C94B11'>{tempPassword}</div>";
-        await SendEmailAsync(email, "Temporary Password", BuildTemplate("Security Notification", content));
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{guestName}</strong>,</p>
+        <p>A temporary access code has been generated for your account. For your security, please use this to log in and change your password immediately.</p>
+        
+        <div style='margin:30px 0; text-align:center; padding:30px; background-color:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px;'>
+            <div style='font-size:12px; color:#64748B; text-transform:uppercase; letter-spacing:2px; margin-bottom:10px;'>Your Temporary Code</div>
+            <div style='font-size:32px; font-weight:800; color:#C94B11; letter-spacing:4px; font-family:monospace;'>{tempPassword}</div>
+        </div>
+
+        <p style='font-size:14px; color:#64748B; font-style:italic;'>If you did not request this change, please contact our security team immediately.</p>";
+
+        await SendEmailAsync(email, "Temporary Access Code", BuildTemplate("Security Notification", content));
     }
 
     public async Task SendEmailVerificationAsync(string email, string name, string link)
     {
-        var content = $@"Dear <strong>{name}</strong>,<br/><br/>Please verify your email address by clicking below.<br/><br/>
-<a href='{link}' style='background:#C94B11;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;'>Verify Email</a>";
-        await SendEmailAsync(email, "Email Verification", BuildTemplate("Email Verification Required", content));
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{name}</strong>,</p>
+        <p>Thank you for registering with <strong>Moore Hotels & Suites</strong>. To complete your account setup and access our full range of services, please verify your email address below.</p>
+        
+        <div style='margin:35px 0; text-align:center;'>
+             <a href='{link}' style='display:inline-block; background-color:#C94B11; color:#FFFFFF; padding:16px 35px; border-radius:8px; text-decoration:none; font-weight:700; font-size:16px; box-shadow:0 4px 6px rgba(201,75,17,0.2);'>Verify My Email</a>
+        </div>
+
+        <p style='font-size:13px; color:#94A3B8;'>This link will expire in 24 hours. If the button above doesn't work, copy and paste this link into your browser:<br/>{link}</p>";
+
+        await SendEmailAsync(email, "Verify Your Email", BuildTemplate("Confirm Your Registration", content));
     }
 
-    public async Task SendPaymentSuccessAsync(string email, string guestName, string bookingCode, decimal amount, string reference)
+    public async Task SendPaymentSuccessAsync(string email, string guestName, string bookingCode, string roomName, decimal amount, string reference)
     {
-        var content = $@"Dear <strong>{guestName}</strong>,<br/><br/>Payment of <strong>NGN {amount:N2}</strong> for booking <strong>{bookingCode}</strong> has been received.<br/>Reference: {reference}";
-        await SendEmailAsync(email, "Payment Confirmed", BuildTemplate("Payment Successful", content));
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{guestName}</strong>,</p>
+        <p>This is to confirm that we have successfully received your payment for booking <strong>{bookingCode}</strong>.</p>
+        
+        <table role='presentation' width='100%' style='margin:25px 0; background-color:#F0FDF4; border: 1px solid #BBF7D0; border-radius:12px; padding:20px;'>
+            <tr>
+                <td>
+                    <div style='font-size:12px; color:#166534; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Amount Received</div>
+                    <div style='font-size:24px; font-weight:800; color:#14532D;'>NGN {amount:N2}</div>
+                </td>
+                <td align='right'>
+                    <div style='font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Transaction Reference</div>
+                    <div style='font-size:14px; font-family:monospace; color:#14532D;'>{reference}</div>
+                </td>
+            </tr>
+        </table>
+
+        <p style='font-size:14px; color:#4B5563;'>Your stay in our <strong>{roomName}</strong> is now fully secured. We look forward to seeing you soon.</p>";
+
+        await SendEmailAsync(email, "Payment Confirmed", BuildTemplate("Payment Successful", content, "#16A34A"));
     }
 
-    public async Task SendCheckOutThankYouAsync(string email, string guestName, string bookingCode)
+    public async Task SendCheckOutThankYouAsync(string email, string guestName, string bookingCode, string roomName)
     {
-        var content = $@"Dear <strong>{guestName}</strong>,<br/><br/>Thank you for staying with us. We hope your stay (<strong>{bookingCode}</strong>) was exceptional.";
-        await SendEmailAsync(email, "Thank You", BuildTemplate("We Appreciate Your Stay", content));
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{guestName}</strong>,</p>
+        <p>Thank you for choosing <strong>Moore Hotels & Suites</strong>. We hope you enjoyed your stay in our <strong>{roomName}</strong> and that everything was to your satisfaction.</p>
+        
+        <table role='presentation' width='100%' style='margin:25px 0; border:1px solid #E2E8F0; border-radius:12px; padding:20px; background-color:#F8FAFC;'>
+            <tr>
+                <td>
+                    <div style='font-size:11px; color:#64748B; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Booking Reference</div>
+                    <div style='font-size:16px; font-weight:700; color:#1E293B; font-family:monospace;'>{bookingCode}</div>
+                </td>
+                <td align='right'>
+                    <div style='font-size:11px; color:#64748B; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Stay Location</div>
+                    <div style='font-size:16px; font-weight:700; color:#1E293B;'>{roomName}</div>
+                </td>
+            </tr>
+        </table>
+
+        <p style='font-size:14px; color:#475569;'>We would love to hear about your experience. Feel free to leave us a review or contact us directly with any feedback.</p>
+        <p style='margin-top:20px; font-weight:600;'>We hope to welcome you back soon!</p>";
+
+        await SendEmailAsync(email, "Thank You", BuildTemplate("We Appreciate Your Visit", content));
     }
 
     // Vibrant staff welcome email
@@ -196,20 +350,20 @@ public class EmailService : IEmailService
                style='margin:30px 0; background-color:#F0FDF4; border: 1px solid #DCFCE7; border-radius:8px;'>
             <tr>
                 <td style='padding:25px;'>
-                    <div style='margin-bottom:15px;'>
-                        <span style='font-size:12px; font-weight:bold; color:{accentGreen}; text-transform:uppercase; letter-spacing:1px;'>Assigned Role</span><br/>
-                        <span style='font-size:16px; color:#111827;'>{role}</span>
+                    <div style='margin-bottom:20px;'>
+                        <span style='font-size:11px; font-weight:bold; color:{accentGreen}; text-transform:uppercase; letter-spacing:1px;'>Assigned Role</span><br/>
+                        <span style='font-size:18px; font-weight:600; color:#111827;'>{role}</span>
                     </div>
                     <div>
-                        <span style='font-size:12px; font-weight:bold; color:{accentGreen}; text-transform:uppercase; letter-spacing:1px;'>Temporary Password</span><br/>
-                        <span style='font-size:24px; font-weight:700; color:#111827; font-family: monospace;'>{tempPassword}</span>
+                        <span style='font-size:11px; font-weight:bold; color:{accentGreen}; text-transform:uppercase; letter-spacing:1px;'>Initial Password</span><br/>
+                        <span style='font-size:26px; font-weight:800; color:#111827; font-family: monospace; letter-spacing:2px;'>{tempPassword}</span>
                     </div>
                 </td>
             </tr>
         </table>
 
         <p style='font-size:15px; color:#4A4A4A; line-height:1.6;'>
-            For security purposes, please log in to the [Staff Portal](https://admin.moorehotelandsuites.com) immediately to change your password.
+            For security purposes, please log in to the <a href='https://admin.moorehotelandsuites.com' style='color:{accentGreen}; font-weight:600; text-decoration:none;'>Staff Portal</a> immediately to change your password.
         </p>
 
         <p style='font-size:13px; color:#94A3B8; font-style:italic; margin-top:25px; border-top:1px solid #F1F5F9; padding-top:15px;'>
@@ -223,24 +377,27 @@ public class EmailService : IEmailService
     }
 
     // Admin & security
-    public async Task SendAdminNewBookingAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, decimal amount)
+    public async Task SendAdminNewBookingAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, string roomCategory, int capacity, DateTime checkIn, DateTime checkOut, int nights, decimal totalAmount, string guestEmail, string guestPhone)
     {
         var content = $@"
-        <p style='margin:0 0 20px 0;'>A new reservation has been confirmed in the system.</p>
-        <table role='presentation' width='100%' style='background-color:#F8F9FA; border-radius:8px;'>
+        <p style='margin:0 0 20px 0;'>A new reservation has been confirmed and requires attention from the operations team.</p>
+        
+        <table role='presentation' width='100%' style='background-color:#F8F9FA; border-radius:12px; border:1px solid #E5E7EB;'>
             <tr>
-                <td style='padding:20px;'>
-                    <div style='font-size:12px; color:#64748B; text-transform:uppercase; letter-spacing:1px;'>Guest Details</div>
-                    <div style='font-size:16px; font-weight:bold; color:#1E293B; margin-bottom:15px;'>{guestName}</div>
-                    
-                    <div style='font-size:12px; color:#64748B; text-transform:uppercase; letter-spacing:1px;'>Room Type</div>
-                    <div style='font-size:16px; font-weight:bold; color:#1E293B; margin-bottom:15px;'>{roomName}</div>
-                    
-                    <div style='font-size:12px; color:#64748B; text-transform:uppercase; letter-spacing:1px;'>Total Revenue</div>
-                    <div style='font-size:20px; font-weight:bold; color:#16A34A;'>NGN {amount:N2}</div>
+                <td style='padding:25px;'>
+                    <div style='font-size:12px; color:#6B7280; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;'>Guest Information</div>
+                    <div style='font-size:18px; font-weight:700; color:#111827;'>{guestName}</div>
+                    <div style='font-size:14px; color:#4B5563; margin-top:4px;'>{guestEmail} | {guestPhone}</div>
                 </td>
             </tr>
-        </table>";
+        </table>
+
+        {GetBookingSummaryHtml(bookingCode, roomName, roomCategory, capacity, checkIn, checkOut, nights, totalAmount)}
+
+        <div style='margin-top:25px; text-align:center;'>
+            <a href='https://admin.moorehotelandsuites.com/bookings/{bookingCode}' style='display:inline-block; background-color:#111111; color:#FFFFFF; padding:12px 25px; border-radius:6px; text-decoration:none; font-size:14px; font-weight:600;'>Manage in Portal</a>
+        </div>";
+
         await SendEmailAsync(adminEmail, "New Booking Alert", BuildTemplate("New Booking Received", content, "#C94B11"));
     }
 
@@ -268,38 +425,52 @@ public class EmailService : IEmailService
     public async Task SendAdminRefundAlertAsync(string adminEmail, string guestName, string bookingCode, string roomName, decimal amount)
     {
         var content = $@"
-        <p style='margin:0 0 20px 0;'>A manual refund requires your immediate attention.</p>
-        <table role='presentation' width='100%' style='border:1px solid #FECACA; background-color:#FEF2F2; border-radius:8px;'>
-            <tr>
-                <td style='padding:20px;'>
-                    <div style='margin-bottom:10px;'><strong>Booking Code:</strong> {bookingCode}</div>
-                    <div style='margin-bottom:10px;'><strong>Guest:</strong> {guestName}</div>
-                    <div style='margin-bottom:10px;'><strong>Room:</strong> {roomName}</div>
-                    <div style='font-size:18px; color:#E11D48; font-weight:bold;'>Amount: NGN {amount:N2}</div>
-                </td>
-            </tr>
-        </table>";
-        await SendEmailAsync(adminEmail, "Refund Action Required", BuildTemplate("Refund Action Required", content, "#E11D48"));
-    }
-
-    public async Task SendRefundCompletionNoticeAsync(string email, string guestName, string bookingCode, decimal amount, string reference)
-    {
-        var content = $@"
-        <p>Dear <strong>{guestName}</strong>,</p>
-        <p>Your refund has been successfully processed and should reflect in your account shortly.</p>
-        <table role='presentation' width='100%' style='margin:25px 0; border-top:1px solid #EEE; border-bottom:1px solid #EEE; padding:20px 0;'>
+        <p style='margin:0 0 20px 0;'>A manual refund request has been triggered and requires administrative confirmation.</p>
+        
+        <table role='presentation' width='100%' style='border:1px solid #FECACA; background-color:#FEF2F2; border-radius:12px; padding:20px;'>
             <tr>
                 <td>
-                    <div style='font-size:13px; color:#666;'>Amount Refunded</div>
-                    <div style='font-size:22px; font-weight:bold; color:#111;'>NGN {amount:N2}</div>
+                    <div style='font-size:11px; color:#B91C1C; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Refund Amount</div>
+                    <div style='font-size:24px; font-weight:800; color:#991B1B;'>NGN {amount:N2}</div>
                 </td>
                 <td align='right'>
-                    <div style='font-size:13px; color:#666;'>Reference ID</div>
-                    <div style='font-size:14px; font-family:monospace; font-weight:bold;'>{reference}</div>
+                    <div style='font-size:11px; color:#B91C1C; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Booking Code</div>
+                    <div style='font-size:16px; font-weight:700; color:#991B1B; font-family:monospace;'>{bookingCode}</div>
                 </td>
             </tr>
         </table>
-        <p style='font-size:14px; color:#666;'>Thank you for your patience.</p>";
+
+        <div style='margin-top:20px; padding:15px; background-color:#FFFFFF; border:1px solid #FEE2E2; border-radius:8px;'>
+            <div style='font-size:12px; color:#6B7280; margin-bottom:4px;'>Guest Details</div>
+            <div style='font-size:14px; font-weight:600; color:#111827;'>{guestName}</div>
+            <div style='font-size:12px; color:#6B7280; margin-top:10px; margin-bottom:4px;'>Room</div>
+            <div style='font-size:14px; font-weight:600; color:#111827;'>{roomName}</div>
+        </div>";
+
+        await SendEmailAsync(adminEmail, "Refund Action Required", BuildTemplate("Refund Alert", content, "#E11D48"));
+    }
+
+    public async Task SendRefundCompletionNoticeAsync(string email, string guestName, string bookingCode, string roomName, decimal amount, string reference)
+    {
+        var content = $@"
+        <p style='margin-top:0;'>Dear <strong>{guestName}</strong>,</p>
+        <p>Your refund for booking <strong>{bookingCode}</strong> (<strong>{roomName}</strong>) has been successfully processed.</p>
+        
+        <table role='presentation' width='100%' style='margin:25px 0; background-color:#F0FDF4; border:1px solid #BBF7D0; border-radius:12px; padding:20px;'>
+            <tr>
+                <td>
+                    <div style='font-size:12px; color:#166534; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Amount Refunded</div>
+                    <div style='font-size:24px; font-weight:800; color:#14532D;'>NGN {amount:N2}</div>
+                </td>
+                <td align='right'>
+                    <div style='font-size:11px; color:#166534; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;'>Reference ID</div>
+                    <div style='font-size:14px; font-family:monospace; color:#14532D;'>{reference}</div>
+                </td>
+            </tr>
+        </table>
+
+        <p style='font-size:14px; color:#4B5563;'>The funds should reflect in your account within 3-5 business days. We apologize for any inconvenience caused and hope to serve you again in the future.</p>";
+
         await SendEmailAsync(email, "Refund Completed", BuildTemplate("Refund Successful", content, "#16A34A"));
     }
 }

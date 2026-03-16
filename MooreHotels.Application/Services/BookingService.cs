@@ -120,7 +120,17 @@ public class BookingService : IBookingService
         try 
         {
             // FIX: Awaited this call so the user knows immediately if the confirmation failed to dispatch
-            await _emailService.SendBookingConfirmationAsync(guest.Email, $"{guest.FirstName} {guest.LastName}", booking.BookingCode, room.Name, booking.CheckIn);
+            await _emailService.SendBookingConfirmationAsync(
+                guest.Email, 
+                $"{guest.FirstName} {guest.LastName}", 
+                booking.BookingCode, 
+                room.Name, 
+                room.Category.ToString(),
+                room.Capacity,
+                booking.CheckIn, 
+                booking.CheckOut,
+                nights,
+                totalAmount);
         }
         catch (Exception ex) 
         {
@@ -132,7 +142,19 @@ public class BookingService : IBookingService
         
         var adminEmail = _config["EmailSettings:AdminNotificationEmail"] ?? _config["EmailSettings:SenderEmail"];
         if (!string.IsNullOrEmpty(adminEmail))
-            _ = _emailService.SendAdminNewBookingAlertAsync(adminEmail, $"{guest.FirstName} {guest.LastName}", booking.BookingCode, room.Name, totalAmount);
+            _ = _emailService.SendAdminNewBookingAlertAsync(
+                adminEmail, 
+                $"{guest.FirstName} {guest.LastName}", 
+                booking.BookingCode, 
+                room.Name, 
+                room.Category.ToString(),
+                room.Capacity,
+                booking.CheckIn,
+                booking.CheckOut,
+                nights,
+                totalAmount,
+                guest.Email,
+                guest.Phone);
 
         string? paymentUrl = (request.PaymentMethod == PaymentMethod.Paystack) ? _paymentService.GeneratePaystackLink(booking.BookingCode, totalAmount, guest.Email) : null;
         string? paymentInstruction = (request.PaymentMethod == PaymentMethod.DirectTransfer) ? _paymentService.GetTransferInstructions() : null;
@@ -189,7 +211,7 @@ public class BookingService : IBookingService
             // FIX: Wrapped Fire-and-Forget in Task.Run with Try-Catch for background thread safety
             _ = Task.Run(async () => {
                 try {
-                    await _emailService.SendCheckOutThankYouAsync(booking.Guest.Email, booking.Guest.FirstName, booking.BookingCode);
+                    await _emailService.SendCheckOutThankYouAsync(booking.Guest!.Email, booking.Guest.FirstName, booking.BookingCode, room?.Name ?? "Reserved Room");
                 } catch (Exception ex) {
                     _logger.LogWarning(ex, "Background Checkout Email failed for {Code}", booking.BookingCode);
                 }
@@ -230,7 +252,8 @@ public class BookingService : IBookingService
         // Send payment confirmation email
         if (booking.Guest != null)
         {
-            _ = _emailService.SendPaymentSuccessAsync(booking.Guest.Email, booking.Guest.FirstName, booking.BookingCode, booking.Amount, reference);
+            var room = await _roomRepo.GetByIdAsync(booking.RoomId);
+            _ = _emailService.SendPaymentSuccessAsync(booking.Guest.Email, booking.Guest.FirstName, booking.BookingCode, room?.Name ?? "Reserved Room", booking.Amount, reference);
         }
 
         return MapToDto(booking);
@@ -284,6 +307,7 @@ public async Task<BookingDto> CancelBookingAsync(Guid bookingId, Guid userId, st
                 $"{booking.Guest.FirstName} {booking.Guest.LastName}", 
                 booking.BookingCode, 
                 room?.Name ?? "Reserved Room", 
+                room?.Category.ToString() ?? "Standard",
                 booking.CheckIn, 
                 reason);
         } catch (Exception ex) {
@@ -294,13 +318,16 @@ public async Task<BookingDto> CancelBookingAsync(Guid bookingId, Guid userId, st
      if (booking.PaymentStatus == PaymentStatus.RefundPending)
     {
         var adminEmail = _config["EmailSettings:SenderEmail"];
-        _ = Task.Run(() => _emailService.SendAdminRefundAlertAsync(
-            adminEmail, 
-            $"{booking.Guest?.FirstName} {booking.Guest?.LastName}", 
-            booking.BookingCode, 
-            room?.Name ?? "Reserved Room", 
-            booking.Amount
-        ));
+        if (!string.IsNullOrEmpty(adminEmail))
+        {
+            _ = Task.Run(() => _emailService.SendAdminRefundAlertAsync(
+                adminEmail, 
+                $"{booking.Guest?.FirstName} {booking.Guest?.LastName}", 
+                booking.BookingCode, 
+                room?.Name ?? "Reserved Room", 
+                booking.Amount
+            ));
+        }
     }
     return MapToDto(booking);
 }
@@ -351,6 +378,7 @@ public async Task<BookingDto> CancelBookingByGuestAsync(string bookingCode, stri
                 $"{booking.Guest.FirstName} {booking.Guest.LastName}", 
                 booking.BookingCode, 
                 room?.Name ?? "Reserved Room", 
+                room?.Category.ToString() ?? "Standard",
                 booking.CheckIn, 
                 reason);
         } catch (Exception ex) {
@@ -361,13 +389,16 @@ public async Task<BookingDto> CancelBookingByGuestAsync(string bookingCode, stri
       if (booking.PaymentStatus == PaymentStatus.RefundPending)
     {
         var adminEmail = _config["EmailSettings:SenderEmail"];
-        _ = Task.Run(() => _emailService.SendAdminRefundAlertAsync(
-            adminEmail, 
-            $"{booking.Guest!.FirstName} {booking.Guest.LastName}", 
-            booking.BookingCode, 
-            room?.Name ?? "Reserved Room", 
-            booking.Amount
-        ));
+        if (!string.IsNullOrEmpty(adminEmail))
+        {
+            _ = Task.Run(() => _emailService.SendAdminRefundAlertAsync(
+                adminEmail, 
+                $"{booking.Guest!.FirstName} {booking.Guest.LastName}", 
+                booking.BookingCode, 
+                room?.Name ?? "Reserved Room", 
+                booking.Amount
+            ));
+        }
     }
 
     return MapToDto(booking);
@@ -398,10 +429,12 @@ public async Task<BookingDto> CompleteRefundAsync(Guid bookingId, string transac
     await _bookingRepo.UpdateAsync(booking);
         _ = Task.Run(async () => {
         try {
+            var room = await _roomRepo.GetByIdAsync(booking.RoomId);
             await _emailService.SendRefundCompletionNoticeAsync(
                 booking.Guest!.Email, 
                 booking.Guest.FirstName, 
                 booking.BookingCode, 
+                room?.Name ?? "Reserved Room",
                 booking.Amount, 
                 transactionRef);
         } catch (Exception ex) {
