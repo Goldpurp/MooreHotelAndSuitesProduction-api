@@ -9,6 +9,7 @@ public record UpdateRoomRequest(
     RoomStatus? Status, 
     decimal? PricePerNight, 
     int? Guest, 
+    int? Capacity,
     bool? IsOnline, 
     string? Description, 
     List<string>? Amenities,

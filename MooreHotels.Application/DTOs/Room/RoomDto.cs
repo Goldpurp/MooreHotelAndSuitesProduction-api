@@ -11,6 +11,7 @@ public record RoomDto(
     RoomStatus Status, 
     decimal PricePerNight,
     int Guest, 
+    int Capacity,
     string Size, 
     bool IsOnline, 
     string Description,

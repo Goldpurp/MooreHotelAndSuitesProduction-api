@@ -10,6 +10,7 @@ public record CreateRoomRequest(
     RoomStatus Status,
     decimal PricePerNight, 
     int Guest, 
+    int Capacity,
     string Size, 
     string Description, 
     List<string> Amenities);

@@ -12,6 +12,7 @@ public class Room
     public RoomStatus Status { get; set; }
     public decimal PricePerNight { get; set; }
     public int Guest { get; set; }
+    public int Capacity { get; set; }
     public string Size { get; set; } = string.Empty;
     public bool IsOnline { get; set; }
     public string Description { get; set; } = string.Empty;
