@@ -12,7 +12,7 @@ public interface IRoomRepository
         DateTime? checkIn,
         DateTime? checkOut,
         RoomCategory? category,
-        int? Guest,
+        int? capacity,
         string? roomNumber,
         string? amenity);
     Task AddAsync(Room room);

@@ -27,7 +27,7 @@ public class RoomRepository : IRoomRepository
         DateTime? checkIn,
         DateTime? checkOut,
         RoomCategory? category,
-        int? Guest,
+        int? capacity,
         string? roomNumber,
         string? amenity)
     {
@@ -53,8 +53,8 @@ public class RoomRepository : IRoomRepository
         if (category.HasValue)
             query = query.Where(r => r.Category == category.Value);
 
-        if (Guest.HasValue && Guest.Value > 0)
-            query = query.Where(r => r.Guest >= Guest.Value);
+        if (capacity.HasValue && capacity.Value > 0)
+            query = query.Where(r => r.Capacity >= capacity.Value);
 
         query = query.Where(r => r.IsOnline);
 

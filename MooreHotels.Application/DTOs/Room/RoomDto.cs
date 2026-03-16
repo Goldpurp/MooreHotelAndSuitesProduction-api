@@ -10,7 +10,6 @@ public record RoomDto(
     PropertyFloor Floor, 
     RoomStatus Status, 
     decimal PricePerNight,
-    int Guest, 
     int Capacity,
     string Size, 
     bool IsOnline, 

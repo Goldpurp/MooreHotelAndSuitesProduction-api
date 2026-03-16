@@ -39,7 +39,7 @@ public class RoomService : IRoomService
             checkIn,
             checkOut,
             request.Category,
-            request.Guest,
+            request.Capacity,
             request.RoomNumber,
             request.Amenity);
 
@@ -87,7 +87,6 @@ public class RoomService : IRoomService
             Category = request.Category,
             Floor = request.Floor,
             PricePerNight = request.PricePerNight,
-            Guest = request.Guest,
             Capacity = request.Capacity,
             Size = request.Size,
             Description = request.Description,
@@ -117,7 +116,6 @@ public class RoomService : IRoomService
             room.IsOnline = request.Status != RoomStatus.Maintenance;
         }
         if (request.PricePerNight != null) room.PricePerNight = request.PricePerNight.Value;
-        if (request.Guest != null) room.Guest = request.Guest.Value;
         if (request.Capacity != null) room.Capacity = request.Capacity.Value;
         if (request.Description != null) room.Description = request.Description;
         if (request.Amenities != null) room.Amenities = request.Amenities;
@@ -161,6 +159,6 @@ public class RoomService : IRoomService
 
     private static RoomDto MapToDto(Room r) => new(
         r.Id, r.RoomNumber, r.Name, r.Category, r.Floor, r.Status,
-        r.PricePerNight, r.Guest, r.Capacity, r.Size, r.IsOnline, r.Description,
+        r.PricePerNight, r.Capacity, r.Size, r.IsOnline, r.Description,
         r.Amenities, r.Images.Select(i => i.Url).ToList(), r.CreatedAt);
 }
