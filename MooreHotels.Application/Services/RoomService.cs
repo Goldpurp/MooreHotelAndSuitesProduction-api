@@ -102,22 +102,26 @@ public class RoomService : IRoomService
     }
 
 
-public async Task UpdateRoomAsync(Guid id, UpdateRoomRequest request)
-{
-    var room = await _roomRepo.GetByIdWithImagesAsync(id);
-    if (room == null) throw new Exception("Room not found");
+    public async Task UpdateRoomAsync(Guid id, UpdateRoomRequest request)
+    {
+        var room = await _roomRepo.GetByIdWithImagesAsync(id);
+        if (room == null) throw new Exception("Room not found");
 
-    room.Name = request.Name;
-    room.Category = request.Category;
-    room.Status = request.Status;
-    room.PricePerNight = request.PricePerNight;
-    room.Guest = request.Guest;
-    room.Description = request.Description;
-    room.Amenities = request.Amenities;
-    room.IsOnline = request.Status != RoomStatus.Maintenance;
+        if (request.Name != null) room.Name = request.Name;
+        if (request.Category != null) room.Category = request.Category.Value;
+        if (request.Floor != null) room.Floor = request.Floor.Value;
+        if (request.Status != null)
+        {
+            room.Status = request.Status.Value;
+            room.IsOnline = request.Status != RoomStatus.Maintenance;
+        }
+        if (request.PricePerNight != null) room.PricePerNight = request.PricePerNight.Value;
+        if (request.Guest != null) room.Guest = request.Guest.Value;
+        if (request.Description != null) room.Description = request.Description;
+        if (request.Amenities != null) room.Amenities = request.Amenities;
 
-    await _roomRepo.UpdateAsync(room); 
-}
+        await _roomRepo.UpdateAsync(room);
+    }
 
 
    public async Task<List<string>> DeleteRoomAsync(Guid id)
