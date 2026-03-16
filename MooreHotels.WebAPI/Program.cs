@@ -20,6 +20,8 @@ using MooreHotels.WebAPI.Middleware;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MooreHotels.Domain.Common;
+
 
 if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
 {
@@ -132,11 +134,12 @@ builder.Services.AddHttpClient();
 // --- SETTINGS BINDING ---
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
+builder.Services.Configure<PaystackSettings>(builder.Configuration.GetSection("PaystackSettings"));
 
 // --- 5. DEPENDENCY INJECTION ---
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<IPaymentService, MockPaymentService>();
+builder.Services.AddScoped<IPaymentService, PaystackService>();
 builder.Services.AddScoped<IRoomRepository, RoomRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IGuestRepository, GuestRepository>();

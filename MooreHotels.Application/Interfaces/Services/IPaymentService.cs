@@ -4,7 +4,7 @@ namespace MooreHotels.Application.Interfaces.Services;
 
 public interface IPaymentService
 {
-    string GeneratePaystackLink(string bookingCode, decimal amount, string email);
+    Task<string> InitializePaymentAsync(string email, decimal amount, string bookingCode, string callbackUrl);
     Task<bool> VerifyPaystackPaymentAsync(string reference);
     string GetTransferInstructions();
 }

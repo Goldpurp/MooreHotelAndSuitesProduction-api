@@ -25,7 +25,9 @@ public class BookingService : IBookingService
     private readonly INotificationService _notificationService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _config;
-    private readonly ILogger<BookingService> _logger; // FIX: Added logging for background tasks
+    private readonly ILogger<BookingService> _logger;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
 
     private const int CHECK_IN_HOUR = 15; // 3:00 PM
     private const int CHECK_OUT_HOUR = 11; // 11:00 AM
@@ -41,7 +43,9 @@ public class BookingService : IBookingService
         INotificationService notificationService,
         UserManager<ApplicationUser> userManager,
         IConfiguration config,
-        ILogger<BookingService> logger)
+        ILogger<BookingService> logger,
+        IHttpContextAccessor httpContextAccessor)
+
     {
         _bookingRepo = bookingRepo;
         _roomRepo = roomRepo;
@@ -54,6 +58,7 @@ public class BookingService : IBookingService
         _userManager = userManager;
         _config = config;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<BookingDto> CreateBookingAsync(CreateBookingRequest request)
@@ -156,7 +161,15 @@ public class BookingService : IBookingService
                 guest.Email,
                 guest.Phone);
 
-        string? paymentUrl = (request.PaymentMethod == PaymentMethod.Paystack) ? _paymentService.GeneratePaystackLink(booking.BookingCode, totalAmount, guest.Email) : null;
+        // Construct Callback URL for Paystack
+        var origin = _httpContextAccessor.HttpContext?.Request.Headers["Origin"].ToString();
+        if (string.IsNullOrEmpty(origin)) origin = "https://moorehotelandsuites.com";
+        var callbackUrl = $"{origin}/booking-status?code={booking.BookingCode}";
+
+        string? paymentUrl = (request.PaymentMethod == PaymentMethod.Paystack) 
+            ? await _paymentService.InitializePaymentAsync(guest.Email, totalAmount, booking.BookingCode, callbackUrl) 
+            : null;
+            
         string? paymentInstruction = (request.PaymentMethod == PaymentMethod.DirectTransfer) ? _paymentService.GetTransferInstructions() : null;
 
         return MapToDto(booking) with { PaymentUrl = paymentUrl, PaymentInstruction = paymentInstruction };
