@@ -72,7 +72,7 @@ public class MooreHotelsDbContext : IdentityDbContext<ApplicationUser, IdentityR
         {
             entity.ToTable("guests");
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.Email).IsUnique();
+            entity.HasIndex(e => e.Email); // No longer unique
         });
 
         builder.Entity<Booking>(entity =>

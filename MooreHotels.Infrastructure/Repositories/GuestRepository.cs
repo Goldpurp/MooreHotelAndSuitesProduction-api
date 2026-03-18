@@ -13,6 +13,9 @@ public class GuestRepository : IGuestRepository
     public async Task<Guest?> GetByIdAsync(string id) => await _db.Guests.FindAsync(id);
     
     public async Task<Guest?> GetByEmailAsync(string email) => await _db.Guests.FirstOrDefaultAsync(g => g.Email == email);
+    
+    public async Task<Guest?> GetByEmailAndNameAsync(string email, string firstName, string lastName) =>
+        await _db.Guests.FirstOrDefaultAsync(g => g.Email == email && g.FirstName == firstName && g.LastName == lastName);
 
     public async Task<IEnumerable<Guest>> GetAllAsync() => await _db.Guests.ToListAsync();
 

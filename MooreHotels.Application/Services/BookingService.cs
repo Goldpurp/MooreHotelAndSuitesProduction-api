@@ -83,7 +83,13 @@ public class BookingService : IBookingService
             throw new Exception("This room is already reserved for the selected dates.");
 
         // 3. Guest Management
-        var guest = await _guestRepo.GetByEmailAsync(request.GuestEmail.Trim());
+        // FIX: Decouple identity from email. Use both Email and Name to identify guests.
+        // This allows different people (e.g., family) to share an email without merging identities.
+        var guest = await _guestRepo.GetByEmailAndNameAsync(
+            request.GuestEmail.Trim().ToLower(), 
+            request.GuestFirstName.Trim(), 
+            request.GuestLastName.Trim());
+
         if (guest == null)
         {
             guest = new Guest
