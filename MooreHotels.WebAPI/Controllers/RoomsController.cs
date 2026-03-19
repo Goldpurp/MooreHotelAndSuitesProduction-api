@@ -184,7 +184,8 @@ public class RoomsController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Admin,Manager")]
-    public async Task<IActionResult> UpdateRoom(Guid id, [FromBody] UpdateRoomRequest request)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> UpdateRoom(Guid id, [FromForm] UpdateRoomRequest request, List<IFormFile> files)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync<IActionResult>(async () =>
@@ -193,6 +194,22 @@ public class RoomsController : ControllerBase
             try
             {
                 await _roomService.UpdateRoomAsync(id, request);
+
+                if (files != null && files.Any())
+                    {
+                    var uploadResults = await _imageService.UploadMultipleAsync(files, "rooms");
+                    foreach (var result in uploadResults)
+                     {
+                        _context.RoomImages.Add(new RoomImage
+                        {
+                        Id = Guid.NewGuid(),
+                        RoomId = id,
+                        Url = result.Url,
+                        PublicId = result.PublicId,
+                        CreatedAt = DateTime.UtcNow
+                        });
+                       }
+                     }
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
                 return NoContent();
