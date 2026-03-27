@@ -21,4 +21,5 @@ public record BookingDto(
     string? Notes,
     DateTime CreatedAt,
     string? PaymentUrl = null,
-    string? PaymentInstruction = null);
+    string? PaymentInstruction = null,
+    string? NotificationMessage = null);

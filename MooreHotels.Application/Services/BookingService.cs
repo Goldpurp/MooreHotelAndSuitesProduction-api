@@ -29,8 +29,8 @@ public class BookingService : IBookingService
     private readonly IHttpContextAccessor _httpContextAccessor;
 
 
-    private const int CHECK_IN_HOUR = 15; // 3:00 PM
-    private const int CHECK_OUT_HOUR = 11; // 11:00 AM
+    private const int CHECK_IN_HOUR = 14; // 2:00 PM
+    private const int CHECK_OUT_HOUR = 12; // 12:00 PM
 
     public BookingService(
         IBookingRepository bookingRepo, 
@@ -216,8 +216,11 @@ public class BookingService : IBookingService
         
         if (status == BookingStatus.CheckedIn)
         {
-            if (DateTime.UtcNow.Date < booking.CheckIn.Date) throw new Exception("Arrival too early. Official check-in starts at 3:00 PM.");
-             if (DateTime.UtcNow > booking.CheckOut) throw new Exception("Access Denied: This booking expired at 11:00 AM today.");
+            var now = DateTime.UtcNow;
+            if (now > booking.CheckOut) throw new Exception("Access Denied: This booking is in the past.");
+            if (now > booking.CheckOut.AddMinutes(-30)) throw new Exception("Access Denied: This booking expires in 30min.");
+            
+            if (now.Date < booking.CheckIn.Date) throw new Exception("Arrival too early. Official check-in starts at 2:00 PM.");
             if (booking.PaymentStatus != PaymentStatus.Paid) throw new Exception("Full payment verification required.");
             if (room != null) { room.Status = RoomStatus.Occupied; await _roomRepo.UpdateAsync(room); }
             await _visitService.CreateRecordAsync(booking.BookingCode, "CHECK_IN", actingUser?.Name ?? "Admin");
@@ -471,9 +474,28 @@ public async Task<IEnumerable<BookingDto>> GetPendingRefundsAsync()
 }
 
 
-    private static BookingDto MapToDto(Booking b) => new(
-        b.Id, b.BookingCode, b.RoomId, b.GuestId, 
-        b.Guest?.FirstName ?? "", b.Guest?.LastName ?? "", b.Guest?.Email ?? "", b.Guest?.Phone ?? "",
-        b.CheckIn, b.CheckOut,
-        b.Status, b.Amount, b.PaymentStatus, b.PaymentMethod, b.TransactionReference, b.Notes, b.CreatedAt);
+    private static BookingDto MapToDto(Booking b)
+    {
+        string? msg = null;
+        var now = DateTime.UtcNow;
+        if (b.Status == BookingStatus.CheckedIn)
+        {
+            if (now > b.CheckOut.AddMinutes(-30) && now <= b.CheckOut)
+                msg = "Guest checks out in 30mins";
+        }
+        else if (b.Status == BookingStatus.Confirmed || b.Status == BookingStatus.Pending)
+        {
+            if (now > b.CheckOut.AddMinutes(-30) && now <= b.CheckOut)
+                msg = "Booking expires in 30min";
+            else if (now > b.CheckOut)
+                msg = "Booking is in the past";
+        }
+
+        return new BookingDto(
+            b.Id, b.BookingCode, b.RoomId, b.GuestId,
+            b.Guest?.FirstName ?? "", b.Guest?.LastName ?? "", b.Guest?.Email ?? "", b.Guest?.Phone ?? "",
+            b.CheckIn, b.CheckOut,
+            b.Status, b.Amount, b.PaymentStatus, b.PaymentMethod, b.TransactionReference, b.Notes, b.CreatedAt,
+            NotificationMessage: msg);
+    }
 }

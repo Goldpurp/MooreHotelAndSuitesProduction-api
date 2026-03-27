@@ -3,18 +3,16 @@ namespace MooreHotels.Domain.Enums;
 public enum RoomCategory
 {
     Standard,
-    Business,
+    Deluxe,
     Executive,
-    Suite
+    PresidentialSuite
 }
 
 public enum PropertyFloor
 {
     GroundFloor,
     FirstFloor,
-    SecondFloor,
-    ThirdFloor,
-    Penthouse
+    SecondFloor
 }
 
 public enum RoomStatus
