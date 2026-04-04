@@ -12,8 +12,8 @@ public class RoomService : IRoomService
     private readonly IBookingRepository _bookingRepo;
     private readonly IImageService _imageService;
 
-    private const int CHECK_IN_HOUR = 15; // 3:00 PM
-    private const int CHECK_OUT_HOUR = 11; // 11:00 AM
+    private const int CHECK_IN_HOUR = 14; // 2:00 PM
+    private const int CHECK_OUT_HOUR = 12; // 12:00 PM
 
     public RoomService(IRoomRepository roomRepo, IBookingRepository bookingRepo, IImageService imageService)
     {
@@ -64,7 +64,7 @@ public class RoomService : IRoomService
         var end = checkOut.Date.AddHours(CHECK_OUT_HOUR);
 
         if (start >= end)
-            return new RoomAvailabilityResponse(false, $"Invalid range. Standard policy: Check-out by {CHECK_OUT_HOUR}:00 AM.");
+            return new RoomAvailabilityResponse(false, $"Invalid range. Standard policy: Check-out by {CHECK_OUT_HOUR}:00 PM.");
 
         var isBooked = await _bookingRepo.IsRoomBookedAsync(roomId, start, end);
 

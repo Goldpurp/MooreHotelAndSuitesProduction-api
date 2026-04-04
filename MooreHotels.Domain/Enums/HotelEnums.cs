@@ -12,8 +12,10 @@ public enum PropertyFloor
 {
     GroundFloor,
     FirstFloor,
-    SecondFloor
+    SecondFloor,
+    Bungalow
 }
+
 
 public enum RoomStatus
 {

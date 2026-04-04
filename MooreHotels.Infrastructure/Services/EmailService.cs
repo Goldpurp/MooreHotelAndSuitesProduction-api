@@ -161,12 +161,12 @@ public class EmailService : IEmailService
                         <td style='padding:15px 0;'>
                             <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Check-In</div>
                             <div style='font-size:14px; color:#1E293B; font-weight:600;'>{checkIn.Value:MMM dd, yyyy}</div>
-                            <div style='font-size:12px; color:#64748B;'>After 3:00 PM</div>
+                            <div style='font-size:12px; color:#64748B;'>After 2:00 PM</div>
                         </td>
                         <td style='padding:15px 0;' align='right'>
                             <div style='font-size:11px; color:#94A3B8; text-transform:uppercase; margin-bottom:4px;'>Check-Out</div>
                             <div style='font-size:14px; color:#1E293B; font-weight:600;'>{checkOut.Value:MMM dd, yyyy}</div>
-                            <div style='font-size:12px; color:#64748B;'>Before 11:00 AM</div>
+                            <div style='font-size:12px; color:#64748B;'>Before 12:00 PM</div>
                         </td>
                     </tr>";
         }
@@ -207,7 +207,7 @@ public class EmailService : IEmailService
         {GetBookingSummaryHtml(bookingCode, roomName, roomCategory, capacity, checkIn, checkOut, nights, totalAmount)}
 
         <div style='margin-top:25px; padding:15px; background-color:#FEF9C3; border: 1px solid #FEF08A; border-radius:8px; font-size:14px; color:#854D0E;'>
-            <strong>Important Note:</strong> Please present a valid government-issued ID upon check-in. Our check-in time starts from 3:00 PM.
+            <strong>Important Note:</strong> Please present a valid government-issued ID upon check-in. Our check-in time starts from 2:00 PM.
         </div>
         <p style='margin-top:20px;'>If you have any special requests prior to your arrival, simply reply to this email.</p>";
 
@@ -242,7 +242,7 @@ public class EmailService : IEmailService
              <a href='https://moorehotelandsuites.com/my-booking' style='display:inline-block; background-color:#C94B11; color:#FFFFFF; padding:14px 30px; border-radius:8px; text-decoration:none; font-weight:700;'>View Stay Details</a>
         </div>
 
-        <p style='font-size:14px; line-height:1.6;'>Standard check-in starts at <strong>3:00 PM</strong>. Safe travels!</p>";
+        <p style='font-size:14px; line-height:1.6;'>Standard check-in starts at <strong>2:00 PM</strong>. Safe travels!</p>";
 
         await SendEmailAsync(email, "Check-In Reminder", BuildTemplate("Your Stay Begins Tomorrow", content));
     }    public async Task SendTemporaryPasswordAsync(string email, string guestName, string tempPassword)
