@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MooreHotels.Application.DTOs;
 using MooreHotels.Application.Interfaces.Services;
 using MooreHotels.Domain.Entities;
 using MooreHotels.Domain.Enums;
+using System.Security.Claims;
 using MooreHotels.Infrastructure.Persistence;
 
 namespace MooreHotels.WebAPI.Controllers;
@@ -15,17 +17,20 @@ public class RoomsController : ControllerBase
 {
     private readonly IRoomService _roomService;
     private readonly IImageService _imageService;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly MooreHotelsDbContext _context;
     private readonly ILogger<RoomsController> _logger;
 
     public RoomsController(
         IRoomService roomService,
         IImageService imageService,
+        UserManager<ApplicationUser> userManager,
         MooreHotelsDbContext context,
         ILogger<RoomsController> logger)
     {
         _roomService = roomService;
         _imageService = imageService;
+        _userManager = userManager;
         _context = context;
         _logger = logger;
     }
@@ -183,7 +188,7 @@ public class RoomsController : ControllerBase
 
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin,Manager")]
+    [Authorize(Roles = "Admin,Manager,Staff")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UpdateRoom(Guid id, [FromForm] UpdateRoomRequest request, List<IFormFile> files)
     {
@@ -193,6 +198,19 @@ public class RoomsController : ControllerBase
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                // Access Control for Staff
+                if (User.IsInRole("Staff"))
+                {
+                    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                    var user = await _userManager.FindByIdAsync(userId!);
+                    var allowedDepts = new[] { "Reception", "FrontDesk", "Housekeeping" };
+
+                    if (user == null || string.IsNullOrEmpty(user.Department) || !allowedDepts.Contains(user.Department))
+                    {
+                        return Forbid();
+                    }
+                }
+
                 await _roomService.UpdateRoomAsync(id, request);
 
                 // Handle image deletion: Keep only images present in request.Images
