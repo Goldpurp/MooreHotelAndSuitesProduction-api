@@ -195,24 +195,49 @@ public class RoomsController : ControllerBase
             {
                 await _roomService.UpdateRoomAsync(id, request);
 
-                if (files != null && files.Any())
+                // Handle image deletion: Keep only images present in request.Images
+                if (request.Images != null)
+                {
+                    var existingImages = await _context.RoomImages
+                        .Where(img => img.RoomId == id)
+                        .ToListAsync();
+
+                    var imagesToDelete = existingImages
+                        .Where(img => !request.Images.Contains(img.Url))
+                        .ToList();
+
+                    if (imagesToDelete.Any())
                     {
+                        _context.RoomImages.RemoveRange(imagesToDelete);
+                        foreach (var img in imagesToDelete)
+                        {
+                            if (!string.IsNullOrEmpty(img.PublicId))
+                            {
+                                await _imageService.DeleteImageAsync(img.PublicId);
+                            }
+                        }
+                    }
+                }
+
+                if (files != null && files.Any())
+                {
                     var uploadResults = await _imageService.UploadMultipleAsync(files, "rooms");
                     foreach (var result in uploadResults)
-                     {
+                    {
                         _context.RoomImages.Add(new RoomImage
                         {
-                        Id = Guid.NewGuid(),
-                        RoomId = id,
-                        Url = result.Url,
-                        PublicId = result.PublicId,
-                        CreatedAt = DateTime.UtcNow
+                            Id = Guid.NewGuid(),
+                            RoomId = id,
+                            Url = result.Url,
+                            PublicId = result.PublicId,
+                            CreatedAt = DateTime.UtcNow
                         });
-                       }
-                     }
+                    }
+                }
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
                 return NoContent();
+
             }
             catch (Exception ex)
             {
