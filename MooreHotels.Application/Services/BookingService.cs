@@ -239,6 +239,18 @@ public class BookingService : IBookingService
                 }
             });
         }
+        else if (status == BookingStatus.NoShow)
+        {
+            if (booking.Status == BookingStatus.CheckedIn || booking.Status == BookingStatus.CheckedOut)
+                throw new Exception("Security Constraint: Cannot mark an active or completed stay as a No-Show.");
+
+            if (room != null)
+            {
+                room.Status = RoomStatus.Available;
+                await _roomRepo.UpdateAsync(room);
+            }
+        }
+
 
         // FIX: Robust JSON handling logic
         var rawHistory = string.IsNullOrWhiteSpace(booking.StatusHistoryJson) ? "[]" : booking.StatusHistoryJson;

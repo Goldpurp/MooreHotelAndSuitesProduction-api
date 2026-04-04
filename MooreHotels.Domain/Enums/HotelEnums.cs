@@ -32,8 +32,10 @@ public enum BookingStatus
     Confirmed,
     CheckedIn,
     CheckedOut,
-    Cancelled
+    Cancelled,
+    NoShow
 }
+
 
 public enum PaymentStatus
 {
