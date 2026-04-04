@@ -90,6 +90,23 @@ public class StaffController : ControllerBase
     }
 
 
+    [HttpPost("accounts/{id}/deactivate")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> Deactivate(Guid id)
+    {
+        return await ChangeStatus(id, new ChangeStatusRequest(ProfileStatus.Suspended));
+    }
+
+
+    [HttpPost("accounts/{id}/activate")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> Activate(Guid id)
+    {
+        return await ChangeStatus(id, new ChangeStatusRequest(ProfileStatus.Active));
+    }
+
+
+
     [HttpDelete("accounts/{id}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(Guid id)
