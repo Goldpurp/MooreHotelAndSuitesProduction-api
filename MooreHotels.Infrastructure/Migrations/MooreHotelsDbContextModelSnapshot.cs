@@ -371,6 +371,65 @@ namespace MooreHotels.Infrastructure.Migrations
                     b.ToTable("guests", (string)null);
                 });
 
+            modelBuilder.Entity("MooreHotels.Domain.Entities.MonnifyTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("BookingCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerName")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Fee")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("MerchantReference")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MonnifyReference")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentMethod")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RawPayloadJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal?>("SettledAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TransactionReference")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TransactionReference")
+                        .IsUnique();
+
+                    b.ToTable("monnify_transactions", (string)null);
+                });
+
             modelBuilder.Entity("MooreHotels.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")

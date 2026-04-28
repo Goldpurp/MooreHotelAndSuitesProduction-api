@@ -48,6 +48,31 @@ namespace MooreHotels.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "monnify_transactions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    BookingCode = table.Column<string>(type: "text", nullable: false),
+                    TransactionReference = table.Column<string>(type: "text", nullable: false),
+                    MonnifyReference = table.Column<string>(type: "text", nullable: true),
+                    MerchantReference = table.Column<string>(type: "text", nullable: true),
+                    Amount = table.Column<decimal>(type: "numeric", nullable: false),
+                    Fee = table.Column<decimal>(type: "numeric", nullable: true),
+                    SettledAmount = table.Column<decimal>(type: "numeric", nullable: true),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    PaymentMethod = table.Column<string>(type: "text", nullable: true),
+                    CustomerEmail = table.Column<string>(type: "text", nullable: true),
+                    CustomerName = table.Column<string>(type: "text", nullable: true),
+                    RawPayloadJson = table.Column<string>(type: "jsonb", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_monnify_transactions", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "notifications",
                 columns: table => new
                 {
@@ -89,7 +114,7 @@ namespace MooreHotels.Infrastructure.Migrations
                     Floor = table.Column<string>(type: "text", nullable: false),
                     Status = table.Column<string>(type: "text", nullable: false),
                     PricePerNight = table.Column<decimal>(type: "numeric", nullable: false),
-                    Guest = table.Column<int>(type: "integer", nullable: false),
+                    Capacity = table.Column<int>(type: "integer", nullable: false),
                     Size = table.Column<string>(type: "text", nullable: false),
                     IsOnline = table.Column<bool>(type: "boolean", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: false),
@@ -349,7 +374,12 @@ namespace MooreHotels.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_guests_Email",
                 table: "guests",
-                column: "Email",
+                column: "Email");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_monnify_transactions_TransactionReference",
+                table: "monnify_transactions",
+                column: "TransactionReference",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -406,6 +436,9 @@ namespace MooreHotels.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "bookings");
+
+            migrationBuilder.DropTable(
+                name: "monnify_transactions");
 
             migrationBuilder.DropTable(
                 name: "notifications");

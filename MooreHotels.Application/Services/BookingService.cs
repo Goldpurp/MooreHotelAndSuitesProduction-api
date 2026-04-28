@@ -20,7 +20,7 @@ public class BookingService : IBookingService
     private readonly IGuestRepository _guestRepo;
     private readonly IAuditLogRepository _auditRepo;
     private readonly IEmailService _emailService;
-    private readonly IPaymentService _paymentService;
+    private readonly IMonnifyService _monnifyService;
     private readonly IVisitRecordService _visitService;
     private readonly INotificationService _notificationService;
     private readonly UserManager<ApplicationUser> _userManager;
@@ -38,7 +38,7 @@ public class BookingService : IBookingService
         IGuestRepository guestRepo, 
         IAuditLogRepository auditRepo,
         IEmailService emailService,
-        IPaymentService paymentService,
+        IMonnifyService monnifyService,
         IVisitRecordService visitService,
         INotificationService notificationService,
         UserManager<ApplicationUser> userManager,
@@ -52,7 +52,7 @@ public class BookingService : IBookingService
         _guestRepo = guestRepo;
         _auditRepo = auditRepo;
         _emailService = emailService;
-        _paymentService = paymentService;
+        _monnifyService = monnifyService;
         _visitService = visitService;
         _notificationService = notificationService;
         _userManager = userManager;
@@ -172,11 +172,11 @@ public class BookingService : IBookingService
         if (string.IsNullOrEmpty(origin)) origin = "https://moorehotelandsuites.com";
         var callbackUrl = $"{origin}/booking-status?code={booking.BookingCode}";
 
-        string? paymentUrl = (request.PaymentMethod == PaymentMethod.Paystack) 
-            ? await _paymentService.InitializePaymentAsync(guest.Email, totalAmount, booking.BookingCode, callbackUrl) 
+        string? paymentUrl = (booking.PaymentMethod == PaymentMethod.Monnify) 
+            ? await _monnifyService.InitializeMonnifyPaymentAsync(guest.Email, $"{guest.FirstName} {guest.LastName}", totalAmount, booking.BookingCode, callbackUrl) 
             : null;
             
-        string? paymentInstruction = (request.PaymentMethod == PaymentMethod.DirectTransfer) ? _paymentService.GetTransferInstructions() : null;
+        string? paymentInstruction = (booking.PaymentMethod == PaymentMethod.DirectTransfer) ? GetTransferInstructions() : null;
 
         return MapToDto(booking) with { PaymentUrl = paymentUrl, PaymentInstruction = paymentInstruction };
     }
@@ -509,5 +509,14 @@ public async Task<IEnumerable<BookingDto>> GetPendingRefundsAsync()
             b.CheckIn, b.CheckOut,
             b.Status, b.Amount, b.PaymentStatus, b.PaymentMethod, b.TransactionReference, b.Notes, b.CreatedAt,
             NotificationMessage: msg);
+    }
+
+    private string GetTransferInstructions()
+    {
+        return "Please transfer the total amount to:\n" +
+               "Bank: Moore International Bank\n" +
+               "Account Name: Moore Hotel and Suites Ltd\n" +
+               "Account Number: 0078649036\n" +
+               "Ref: [Your Booking Code]";
     }
 }

@@ -13,13 +13,13 @@ namespace MooreHotels.WebAPI.Controllers;
 public class BookingsController : ControllerBase
 {
     private readonly IBookingService _bookingService;
-    private readonly IPaymentService _paymentService;
+    private readonly IMonnifyService _monnifyService;
     private readonly IBookingRepository _bookingRepo;
 
-    public BookingsController(IBookingService bookingService, IPaymentService paymentService, IBookingRepository bookingRepo)
+    public BookingsController(IBookingService bookingService, IMonnifyService monnifyService, IBookingRepository bookingRepo)
     {
         _bookingService = bookingService;
-        _paymentService = paymentService;
+        _monnifyService = monnifyService;
         _bookingRepo = bookingRepo;
     }
 
@@ -64,25 +64,24 @@ public class BookingsController : ControllerBase
         }
     }
 
-    [HttpPost("{code}/verify-paystack")]
+    [HttpPost("{code}/verify-monnify")]
     [AllowAnonymous]
-    public async Task<IActionResult> VerifyPaystack(string code)
+    public async Task<IActionResult> VerifyMonnify(string code, [FromQuery] string transactionReference)
     {
-        var success = await _paymentService.VerifyPaystackPaymentAsync(code);
+        var success = await _monnifyService.VerifyTransactionAsync(transactionReference);
         if (success)
         {
             try
             {
-                var reference = $"PS-{Guid.NewGuid().ToString("N")[..12].ToUpper()}";
-                var dto = await _bookingService.ProcessPaymentSuccessAsync(code, reference);
-                return Ok(new { Message = "Payment verified automatically.", Data = dto });
+                var dto = await _bookingService.ProcessPaymentSuccessAsync(code, transactionReference);
+                return Ok(new { Message = "Monnify payment verified successfully.", Data = dto });
             }
             catch (Exception ex)
             {
                 return BadRequest(new { Message = ex.Message });
             }
         }
-        return BadRequest(new { Message = "Payment verification failed." });
+        return BadRequest(new { Message = "Monnify payment verification failed." });
     }
 
     [HttpPost("{code}/confirm-transfer")]

@@ -20,6 +20,7 @@ public class MooreHotelsDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<VisitRecord> VisitRecords => Set<VisitRecord>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<MonnifyTransaction> MonnifyTransactions => Set<MonnifyTransaction>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -101,6 +102,14 @@ public class MooreHotelsDbContext : IdentityDbContext<ApplicationUser, IdentityR
         {
             entity.Property(e => e.Role).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
+        });
+
+        builder.Entity<MonnifyTransaction>(entity =>
+        {
+            entity.ToTable("monnify_transactions");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TransactionReference).IsUnique();
+            entity.Property(e => e.RawPayloadJson).HasColumnType("jsonb");
         });
     }
 }

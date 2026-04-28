@@ -48,7 +48,7 @@ public enum PaymentStatus
 
 public enum PaymentMethod
 {
-    Paystack,
+    Monnify,
     DirectTransfer
 }
 
